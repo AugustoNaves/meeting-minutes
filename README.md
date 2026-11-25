@@ -27,21 +27,44 @@ Example output: [docs/example-minutes.md](docs/example-minutes.md).
 | Mac with Apple Silicon (M1 or newer) | On-device transcription runs on the Neural Engine |
 | **macOS 26 (Tahoe) or newer** | The speech recognizer used (SpeechAnalyzer) only exists from macOS 26 |
 | Apple Command Line Tools | To build the app. The full Xcode is not needed |
-| One of these, to write the minutes: **Claude Code** (logged in), **Antigravity CLI** (`agy`, Gemini, logged in) or a **Claude API key** | You choose which one in the menu |
+| Optional: an AI to write the minutes (see below) | Without one, the minutes contain only the transcript |
 
-If the Command Line Tools are missing, install them with:
+The Command Line Tools (`xcode-select --install`) are only needed to build from the source.
 
-```bash
-xcode-select --install
-```
+**Which AI?** Prosa records and transcribes on your Mac by itself. An AI turns the transcript into minutes (summary, decisions, tasks with owners), cleans up dictations and keeps the glossary up to date. Only text is sent to it, never audio. The first-launch setup explains this and lets you pick one, or none:
 
-Without any of the three minutes writers, the app still works, but the `.md` only contains the transcript.
+| Option | Cost | Where the text goes |
+|---|---|---|
+| **Claude Code** (`claude`, logged in) | Your Claude subscription | Anthropic |
+| **Gemini via Antigravity** (`agy`, logged in) | Your Google account | Google |
+| **Claude API** key | Per use | Anthropic |
+| **OpenAI / ChatGPT** API key | Per use | OpenAI |
+| **Gemini** key from Google AI Studio | Free tier, then per use | Google |
+| **Ollama** (models on your Mac) | Free | Nowhere: stays on your Mac (slower) |
+| **Other compatible service** (OpenRouter, Groq, LM Studio…): address + key | Depends on the service | That service |
+| **No AI** | Free | Nowhere: the minutes contain the transcript only |
 
 ---
 
 ## 2. Install
 
-Clone the repository and run the installer:
+### The easy way: one line in Terminal
+
+Open Terminal (⌘Space, type “Terminal”) and paste:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/AugustoNaves/prosa/main/scripts/get.sh | bash
+```
+
+It downloads the ready-made app from the latest [release](https://github.com/AugustoNaves/prosa/releases/latest), puts it in Applications and opens it. Nothing to compile. Run the same line again to update. (You can read what it does first in [`scripts/get.sh`](scripts/get.sh).)
+
+### Or download it
+
+Download `Prosa.zip` from the [latest release](https://github.com/AugustoNaves/prosa/releases/latest), unzip it and drag **Prosa** to Applications. The app is not notarized by Apple (that needs a paid developer account), so the first time macOS blocks it: open *System Settings › Privacy & Security*, scroll down and click **Open Anyway** next to Prosa. The one-line install above avoids this step.
+
+### Or build it from the source
+
+With the Command Line Tools installed:
 
 ```bash
 git clone https://github.com/AugustoNaves/prosa.git
@@ -158,8 +181,8 @@ The headings and the `[You]` / `[Meeting]` labels follow the meeting language (b
 | Regenerate Minutes from .md… | Sends the transcript of an existing `.md` to the AI again and rewrites the minutes part (useful if the internet dropped at the time) |
 | Process Pending Recordings | Shows up only if a recording did not become minutes (app quit mid-way, error) |
 | Meeting Language | The language spoken in your meetings: drives transcription and the language of the minutes |
-| Minutes Written By | Claude Code (your Claude account), Gemini via Antigravity (your Google account) or Claude API (your own key) |
-| Minutes Model | With Claude: Opus 5.5 (best quality, default), Sonnet 5.5 or Haiku 5.5 (most economical). With Gemini: Antigravity's default or any model from its list (with "Refresh Model List") |
+| Minutes Written By | Which AI writes the minutes, cleans up dictations and grows the glossary (any option from the table in section 1, or No AI). Choosing one that is not set up yet asks for its key or address and lets you pick a model |
+| Minutes Model | With Claude: Opus 5.5 (best quality, default), Sonnet 5.5 or Haiku 5.5 (most economical). With Gemini via Antigravity: its default or any model from its list. With OpenAI, a Gemini key, Ollama or another service: any model the service lists (“Refresh Model List”), plus changing or removing the key |
 | Set / Remove Claude API Key | The key is stored in the macOS Keychain |
 | Dictation | The dictation shortcut (⌥Space, ⌃⌥Space, ⌥⇧D, ⌃⇧D or off), **Type as You Speak**, **Clean Up Text with AI**, **Learn Glossary Automatically**, **Update Glossary Now** and **Open Glossary** |
 | Microphone | Which microphone records your voice (system default, the Mac's microphone, a headset…), plus **Test Microphone…** |
@@ -301,7 +324,8 @@ Your minutes in `~/Documents/Meeting Minutes` are not deleted.
 Package.swift                     Swift package (builds with the Command Line Tools only)
 Resources/Info.plist              Name, icon, permissions, "no Dock icon", meetingminutes:// links
 scripts/build.sh                  Builds and assembles the .app
-scripts/install.sh                Installs in /Applications and opens it
+scripts/install.sh                Builds, installs in /Applications and opens it
+scripts/get.sh                    One-line install of the latest release (no compiling)
 scripts/make-icon.swift           Draws the icon
 Sources/MeetingMinutes/
   main.swift                      App entry point + command-line mode (--diagnose etc.)
@@ -317,6 +341,7 @@ Sources/MeetingMinutes/
   MeetingLanguage.swift           Meeting language and the translated headings of the minutes
   TranscriptBuilder.swift         [You]/[Meeting], time order, echo removal
   MinutesGenerator.swift          Minutes through Claude Code, Gemini (Antigravity) or the Claude API
+  AIServices.swift                OpenAI, Gemini key, Ollama and other OpenAI-compatible services; their setup
   Processing.swift                From audio to .md; regenerate minutes from an .md
   Onboarding.swift                First launch and permissions
   MinutesViewer.swift             The minutes reader window (list, search, formatted minutes)

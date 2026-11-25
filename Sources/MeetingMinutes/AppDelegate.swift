@@ -475,22 +475,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func addMinutesWriterMenus(to menu: NSMenu) {
         let currentEngine = MinutesGenerator.currentEngine()
+        let chosenNone = Settings.shared.minutesProvider == MinutesProvider.none.rawValue
         let engines = NSMenu()
+        engines.autoenablesItems = false
         for provider in MinutesProvider.allCases {
-            let available = MinutesGenerator.engine(for: provider) != nil
+            if provider == .none { engines.addItem(.separator()) }
+            let ready = provider == .none || MinutesGenerator.engine(for: provider) != nil
             var title = provider.title
-            if !available { title += provider == .claudeAPI ? " — set key…" : " — not installed" }
+            var enabled = true
+            switch provider {
+            case .claudeCode, .gemini:
+                if !ready { title += " — not installed"; enabled = false }
+            case .claudeAPI:
+                if !ready { title += " — set key…" }
+            case .none:
+                break
+            default:
+                if !ready { title += " — set up…" }
+            }
             let option = item(title, #selector(selectProvider(_:)))
             option.representedObject = provider.rawValue
-            option.state = currentEngine.provider == provider ? .on : .off
-            option.isEnabled = available || provider == .claudeAPI
+            option.state = (provider == .none ? chosenNone : currentEngine.provider == provider) ? .on : .off
+            option.isEnabled = enabled
             engines.addItem(option)
         }
-        let engineItem = NSMenuItem(title: "Minutes Written By: \(currentEngine.provider?.shortTitle ?? "nobody (transcript only)")", action: nil, keyEquivalent: "")
+        let writer = chosenNone || currentEngine.provider == nil ? "No AI (transcript only)" : (currentEngine.provider?.shortTitle ?? "")
+        let engineItem = NSMenuItem(title: "Minutes Written By: \(writer)", action: nil, keyEquivalent: "")
         engineItem.submenu = engines
         menu.addItem(engineItem)
 
-        if case .gemini = currentEngine {
+        switch currentEngine {
+        case .gemini:
             let models = NSMenu()
             let standard = item("Antigravity Default", #selector(selectGeminiModel(_:)))
             standard.representedObject = ""
@@ -509,7 +524,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let modelItem = NSMenuItem(title: "Minutes Model: \(GeminiModels.selectedLabel)", action: nil, keyEquivalent: "")
             modelItem.submenu = models
             menu.addItem(modelItem)
-        } else if currentEngine.provider != nil {
+        case .claudeAPI, .claudeCode:
             let models = NSMenu()
             for model in MinutesModel.allCases {
                 let option = item(model.title, #selector(selectModel(_:)))
@@ -520,6 +535,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let modelItem = NSMenuItem(title: "Minutes Model: \(MinutesModel.current.shortName)", action: nil, keyEquivalent: "")
             modelItem.submenu = models
             menu.addItem(modelItem)
+        case let .compatible(connection):
+            let service = connection.service
+            let models = NSMenu()
+            for model in service.cachedModels {
+                let option = item(model, #selector(selectCompatibleModel(_:)))
+                option.representedObject = model
+                option.state = model == connection.model ? .on : .off
+                models.addItem(option)
+            }
+            if !service.cachedModels.isEmpty { models.addItem(.separator()) }
+            models.addItem(item("Refresh Model List", #selector(refreshCompatibleModels)))
+            if service != .ollama {
+                models.addItem(item(service == .custom ? "Change Address or Key…" : "Change Key…", #selector(reconfigureCompatible)))
+                models.addItem(item("Remove Key", #selector(removeCompatibleKey)))
+            }
+            let modelItem = NSMenuItem(title: "Minutes Model: \(connection.model)", action: nil, keyEquivalent: "")
+            modelItem.submenu = models
+            menu.addItem(modelItem)
+        case .none:
+            break
         }
         if Keychain.readAPIKey() == nil {
             menu.addItem(item("Set Claude API Key…", #selector(configureAPIKey)))
@@ -719,14 +754,53 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func selectProvider(_ sender: NSMenuItem) {
         guard let raw = sender.representedObject as? String, let provider = MinutesProvider(rawValue: raw) else { return }
-        if provider == .claudeAPI, Keychain.readAPIKey() == nil {
-            guard Dialog.askForAPIKey() else { return }
+        // A service already set up is chosen right away; otherwise it is set up first.
+        if let service = provider.compatible, service.connection != nil {
+            Settings.shared.minutesProvider = raw
+            Log.info("Minutes written by: \(provider.shortTitle).")
+            return
         }
-        Settings.shared.minutesProvider = raw
-        Log.info("Minutes written by: \(provider.shortTitle).")
-        if provider == .gemini, GeminiModels.cached.isEmpty {
-            Task.detached(priority: .utility) { await GeminiModels.refresh() }
+        Task { @MainActor in
+            if await Onboarding.apply(provider) {
+                Log.info("Minutes written by: \(provider.shortTitle).")
+            }
         }
+    }
+
+    private var currentCompatible: CompatibleService? {
+        if case let .compatible(connection) = MinutesGenerator.currentEngine() { return connection.service }
+        return nil
+    }
+
+    @objc private func selectCompatibleModel(_ sender: NSMenuItem) {
+        guard let model = sender.representedObject as? String, let service = currentCompatible else { return }
+        service.model = model
+        Log.info("Minutes model: \(service.shortTitle) · \(model).")
+    }
+
+    @objc private func refreshCompatibleModels() {
+        guard let service = currentCompatible, let base = service.baseURL.flatMap(URL.init(string:)) else { return }
+        Task { @MainActor in
+            do {
+                let models = try await CompatibleService.listModels(baseURL: base, key: service.key, service: service)
+                service.cachedModels = models
+                Notifier.shared.post(title: "\(service.shortTitle) models refreshed", body: "\(models.count) models available in the menu.", sound: false)
+            } catch {
+                Notifier.shared.post(title: "Could not list \(service.shortTitle) models", body: error.localizedDescription)
+            }
+        }
+    }
+
+    @objc private func reconfigureCompatible() {
+        guard let service = currentCompatible else { return }
+        Task { @MainActor in _ = await AISetup.configure(service) }
+    }
+
+    @objc private func removeCompatibleKey() {
+        guard let service = currentCompatible else { return }
+        service.saveKey(nil)
+        Settings.shared.minutesProvider = nil
+        Notifier.shared.post(title: "Key removed", body: "Minutes written by: \(MinutesGenerator.currentEngine().label).", sound: false)
     }
 
     @objc private func selectGeminiModel(_ sender: NSMenuItem) {

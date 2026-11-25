@@ -28,12 +28,24 @@ enum MinutesProvider: String, CaseIterable {
     case gemini = "gemini"
     /// Anthropic API with your own key (billed per token).
     case claudeAPI = "claude-api"
+    /// OpenAI API with your own key.
+    case openAI = "openai"
+    /// Gemini API with a Google AI Studio key (has a free tier).
+    case geminiKey = "gemini-key"
+    /// Models running on this Mac through Ollama: free, offline.
+    case ollama = "ollama"
+    /// Any other service with an OpenAI-compatible API (OpenRouter, Groq, LM Studio…).
+    case custom = "custom"
+    /// No AI: the minutes contain only the transcript.
+    case none = "none"
 
     var title: String {
         switch self {
         case .claudeCode: return "Claude Code (your Claude account)"
         case .gemini: return "Gemini via Antigravity (your Google account)"
         case .claudeAPI: return "Claude API (your own key)"
+        case .none: return "No AI (transcript only)"
+        default: return compatible?.title ?? rawValue
         }
     }
 
@@ -42,11 +54,16 @@ enum MinutesProvider: String, CaseIterable {
         case .claudeCode: return "Claude Code"
         case .gemini: return "Gemini (Antigravity)"
         case .claudeAPI: return "Claude API"
+        case .none: return "No AI"
+        default: return compatible?.shortTitle ?? rawValue
         }
     }
 
+    /// The OpenAI-compatible service behind this choice, if it is one.
+    var compatible: CompatibleService? { CompatibleService(rawValue: rawValue) }
+
     /// Order used when the chosen provider is not available.
-    static let fallbackOrder: [MinutesProvider] = [.claudeAPI, .claudeCode, .gemini]
+    static let fallbackOrder: [MinutesProvider] = [.claudeAPI, .claudeCode, .gemini, .openAI, .geminiKey, .ollama, .custom]
 }
 
 /// Claude models (used by both Claude Code and the API).
@@ -133,6 +150,7 @@ enum MinutesEngine {
     case claudeAPI(key: String)
     case claudeCode(executable: URL)
     case gemini(executable: URL)
+    case compatible(CompatibleService.Connection)
     case none
 
     var provider: MinutesProvider? {
@@ -140,6 +158,7 @@ enum MinutesEngine {
         case .claudeAPI: return .claudeAPI
         case .claudeCode: return .claudeCode
         case .gemini: return .gemini
+        case let .compatible(connection): return MinutesProvider(rawValue: connection.service.rawValue)
         case .none: return nil
         }
     }
@@ -149,6 +168,7 @@ enum MinutesEngine {
         case .claudeAPI: return "Claude API (your key) · \(MinutesModel.current.shortName)"
         case .claudeCode: return "Claude Code (your account) · \(MinutesModel.current.shortName)"
         case .gemini: return "Gemini (your Google account) · \(GeminiModels.selectedLabel)"
+        case let .compatible(connection): return "\(connection.service.shortTitle) · \(connection.model)"
         case .none: return "none — transcript only"
         }
     }
@@ -164,7 +184,7 @@ enum MinutesError: LocalizedError {
         switch self {
         case let .api(message): return "Claude API: \(message)"
         case let .tool(name, message): return "\(name): \(message)"
-        case .noEngine: return "no minutes writer available: install Claude Code or Antigravity, or set a Claude API key in the menu"
+        case .noEngine: return "no AI is set up to write the minutes: choose one in the menu, under “Minutes Written By”"
         case let .invalidResponse(message): return "Unexpected AI response: \(message)"
         }
     }
@@ -229,15 +249,17 @@ enum MinutesGenerator {
         case .claudeAPI: return Keychain.readAPIKey().map { .claudeAPI(key: $0) }
         case .claudeCode: return findClaudeCLI().map { .claudeCode(executable: $0) }
         case .gemini: return findAntigravityCLI().map { .gemini(executable: $0) }
+        case .none: return nil
+        default: return provider.compatible?.connection.map { .compatible($0) }
         }
     }
 
     /// The one chosen in the menu; if it is not available: API key → Claude Code → Gemini.
     static func currentEngine() -> MinutesEngine {
         if let raw = Settings.shared.minutesProvider,
-           let preferred = MinutesProvider(rawValue: raw),
-           let engine = engine(for: preferred) {
-            return engine
+           let preferred = MinutesProvider(rawValue: raw) {
+            if preferred == .none { return .none }
+            if let engine = engine(for: preferred) { return engine }
         }
         for provider in MinutesProvider.fallbackOrder {
             if let engine = engine(for: provider) { return engine }
@@ -410,6 +432,9 @@ enum MinutesGenerator {
             return try await requestWithClaudeCode(request, executable: executable)
         case let .gemini(executable):
             return try await requestWithGemini(request, executable: executable)
+        case let .compatible(connection):
+            let text = try await CompatibleService.complete(request, connection: connection)
+            return try answer(text, schema: request.schema)
         case .none:
             throw MinutesError.noEngine
         }
@@ -692,7 +717,7 @@ enum MinutesGenerator {
     }
 
     /// A text answer as the JSON object the caller expects.
-    private static func answer(_ text: String, schema: [String: Any]?) throws -> Any {
+    static func answer(_ text: String, schema: [String: Any]?) throws -> Any {
         guard schema == nil else { return try parseJSONObject(from: text) }
         return ["text": text.trimmingCharacters(in: .whitespacesAndNewlines)]
     }

@@ -98,7 +98,7 @@ enum Onboarding {
         await notificationsStep()
         await accessibilityStep()
         await meetingLanguageStep(status: status)
-        minutesEngineStep()
+        await minutesEngineStep()
         loginItemStep()
         Settings.shared.onboardingDone = true
         Dialog.show(
@@ -327,38 +327,74 @@ enum Onboarding {
 
     // MARK: Who writes the minutes
 
-    private static func minutesEngineStep() {
+    /// Explains what an AI adds, lists every option (with what it costs and where the text
+    /// goes) and lets the person pick one or none.
+    private static func minutesEngineStep() async {
+        struct Option {
+            let provider: MinutesProvider
+            let note: String
+            let enabled: Bool
+        }
         let hasClaude = MinutesGenerator.findClaudeCLI() != nil
         let hasGemini = MinutesGenerator.findAntigravityCLI() != nil
-        let hasKey = Keychain.readAPIKey() != nil
+        let ollama = await AISetup.ollamaRunning()
+        let options: [Option] = [
+            Option(provider: .claudeCode, note: hasClaude ? "your Claude subscription" : "not installed on this Mac", enabled: hasClaude),
+            Option(provider: .gemini, note: hasGemini ? "your Google account" : "not installed on this Mac", enabled: hasGemini),
+            Option(provider: .claudeAPI, note: "your Anthropic key, billed per use", enabled: true),
+            Option(provider: .openAI, note: CompatibleService.openAI.summary, enabled: true),
+            Option(provider: .geminiKey, note: CompatibleService.geminiKey.summary, enabled: true),
+            Option(provider: .ollama, note: ollama ? "running on this Mac: free, offline" : CompatibleService.ollama.summary, enabled: true),
+            Option(provider: .custom, note: CompatibleService.custom.summary, enabled: true),
+        ]
+        let explanation = """
+        Prosa records and transcribes on this Mac by itself, without any AI.
 
-        var lines: [String] = []
-        var options: [(title: String, apply: () -> Void)] = []
-        if hasClaude {
-            lines.append("• Claude Code: uses your Claude subscription. Best quality in our tests, about 10 s.")
-            options.append(("Claude Code", { Settings.shared.minutesProvider = MinutesProvider.claudeCode.rawValue }))
-        }
-        if hasGemini {
-            lines.append("• Gemini (Antigravity): uses your Google account. About 20 s.")
-            options.append(("Gemini", { Settings.shared.minutesProvider = MinutesProvider.gemini.rawValue }))
-        }
-        lines.append("• Claude API: your own key, billed per use on your API account.")
-        options.append((hasKey ? "Claude API (saved key)" : "Claude API Key", {
-            if hasKey || Dialog.askForAPIKey() { Settings.shared.minutesProvider = MinutesProvider.claudeAPI.rawValue }
-        }))
-        if !hasClaude && !hasGemini && !hasKey {
-            lines.append("\nI couldn't find Claude Code or Antigravity on this Mac. Without one of them or an API key, the .md will contain only the transcript.")
-            options.append(("Later", {}))
-        }
+        An AI adds three things:
+        • minutes: a summary, the decisions and the tasks with who does them;
+        • dictation clean-up: punctuation, no “é…” or “tipo”, names spelled right;
+        • a glossary that learns the names and terms you use.
 
-        let choice = Dialog.show(
-            "Who Writes the Minutes",
-            "Who should write the summary, decisions and action items? Only the transcript text is sent; the audio never leaves your Mac. You can change this later in the menu.\n\n" + lines.joined(separator: "\n"),
-            buttons: options.map(\.title)
-        )
-        options[min(max(choice, 0), options.count - 1)].apply()
-        if Settings.shared.minutesProvider == MinutesProvider.gemini.rawValue, GeminiModels.cached.isEmpty {
-            Task.detached(priority: .utility) { await GeminiModels.refresh() }
+        Only text is sent to the AI you pick, never audio. Without an AI, the minutes contain the full transcript and dictation types exactly what was recognized. You can change this anytime in the menu, under “Minutes Written By”.
+        """
+        while true {
+            let popup = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 420, height: 26), pullsDown: false)
+            popup.autoenablesItems = false
+            for option in options {
+                popup.addItem(withTitle: "\(option.provider.shortTitle) — \(option.note)")
+                popup.lastItem?.isEnabled = option.enabled
+                popup.lastItem?.representedObject = option.provider.rawValue
+            }
+            if let first = options.firstIndex(where: \.enabled) { popup.selectItem(at: first) }
+            let choice = Dialog.show("Do you want an AI to write your minutes?", explanation, buttons: ["Use This AI", "No AI"], accessory: popup)
+            guard choice == 0, let raw = popup.selectedItem?.representedObject as? String, let provider = MinutesProvider(rawValue: raw) else {
+                Settings.shared.minutesProvider = MinutesProvider.none.rawValue
+                Log.info("Minutes written by: no AI (chosen during setup).")
+                return
+            }
+            if await apply(provider) { return }
+        }
+    }
+
+    /// Sets up the chosen AI. Returns false if it could not be set up (the list shows again).
+    static func apply(_ provider: MinutesProvider) async -> Bool {
+        switch provider {
+        case .claudeCode, .gemini:
+            Settings.shared.minutesProvider = provider.rawValue
+            if provider == .gemini, GeminiModels.cached.isEmpty {
+                Task.detached(priority: .utility) { await GeminiModels.refresh() }
+            }
+            return true
+        case .claudeAPI:
+            guard Keychain.readAPIKey() != nil || Dialog.askForAPIKey() else { return false }
+            Settings.shared.minutesProvider = provider.rawValue
+            return true
+        case .none:
+            Settings.shared.minutesProvider = provider.rawValue
+            return true
+        default:
+            guard let service = provider.compatible else { return false }
+            return await AISetup.configure(service)
         }
     }
 

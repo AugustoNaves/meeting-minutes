@@ -220,6 +220,44 @@ enum Keychain {
     private static let service = "local.meetingminutes"
     private static let account = "anthropic-api-key"
 
+    /// Keys of the other AI services, one Keychain item each (`account` = the service).
+    static func read(account: String) -> String? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne,
+        ]
+        var item: CFTypeRef?
+        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
+              let data = item as? Data, let key = String(data: data, encoding: .utf8), !key.isEmpty
+        else { return nil }
+        return key
+    }
+
+    @discardableResult
+    static func save(_ key: String, account: String, label: String) -> Bool {
+        delete(account: account)
+        let attributes: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecAttrLabel as String: label,
+            kSecValueData as String: Data(key.utf8),
+        ]
+        return SecItemAdd(attributes as CFDictionary, nil) == errSecSuccess
+    }
+
+    static func delete(account: String) {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+        ]
+        SecItemDelete(query as CFDictionary)
+    }
+
     static func readAPIKey() -> String? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
