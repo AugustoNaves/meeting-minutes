@@ -1,10 +1,14 @@
-// Draws the app icon (AppIcon.icns) from a system symbol.
+// Draws the app icon (AppIcon.icns): the two "Calçadão" waves, cream on charcoal, the same
+// marks as the dictation indicator (the waves of Copacabana's sidewalk).
 // Usage: swiftc -O scripts/make-icon.swift -o build/make-icon && build/make-icon build/AppIcon.icns
 import AppKit
 
 let output = URL(fileURLWithPath: CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "AppIcon.icns")
-let iconset = FileManager.default.temporaryDirectory.appendingPathComponent("MeetingMinutes-\(UUID().uuidString).iconset")
+let iconset = FileManager.default.temporaryDirectory.appendingPathComponent("Prosa-\(UUID().uuidString).iconset")
 try FileManager.default.createDirectory(at: iconset, withIntermediateDirectories: true)
+
+let charcoal = NSColor(srgbRed: 0x2C / 255.0, green: 0x2C / 255.0, blue: 0x2A / 255.0, alpha: 1)
+let cream = NSColor(srgbRed: 0xF1 / 255.0, green: 0xEF / 255.0, blue: 0xE8 / 255.0, alpha: 1)
 
 func render(size: Int) -> Data? {
     guard let rep = NSBitmapImageRep(
@@ -14,22 +18,32 @@ func render(size: Int) -> Data? {
     NSGraphicsContext.saveGraphicsState()
     NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
     let s = CGFloat(size)
-    let inset = s * 0.09
+    // macOS icon grid: the rounded square takes ~80% of the canvas.
+    let inset = s * 0.098
     let rect = NSRect(x: inset, y: inset, width: s - 2 * inset, height: s - 2 * inset)
-    let path = NSBezierPath(roundedRect: rect, xRadius: rect.width * 0.225, yRadius: rect.width * 0.225)
-    NSGradient(starting: NSColor(calibratedRed: 0.13, green: 0.20, blue: 0.45, alpha: 1),
-               ending: NSColor(calibratedRed: 0.10, green: 0.55, blue: 0.62, alpha: 1))?.draw(in: path, angle: -60)
+    charcoal.setFill()
+    NSBezierPath(roundedRect: rect, xRadius: rect.width * 0.225, yRadius: rect.width * 0.225).fill()
 
-    let config = NSImage.SymbolConfiguration(pointSize: s * 0.40, weight: .semibold)
-        .applying(NSImage.SymbolConfiguration(paletteColors: [.white]))
-    if let symbol = NSImage(systemSymbolName: "waveform", accessibilityDescription: nil)?.withSymbolConfiguration(config) {
-        let symbolSize = symbol.size
-        symbol.draw(in: NSRect(x: (s - symbolSize.width) / 2, y: (s - symbolSize.height) / 2 + s * 0.02,
-                               width: symbolSize.width, height: symbolSize.height))
+    // Two parallel waves, like the sidewalk's mosaic stripes.
+    let width = rect.width * 0.62
+    let left = rect.midX - width / 2
+    let amplitude = rect.height * 0.05
+    let wavelength = width / 1.35
+    cream.setStroke()
+    for offset in [0.1, -0.1] as [CGFloat] {
+        let mid = rect.midY + rect.height * offset
+        let path = NSBezierPath()
+        path.lineWidth = max(1.5, rect.width * 0.068)
+        path.lineCapStyle = .round
+        path.lineJoinStyle = .round
+        var x: CGFloat = 0
+        path.move(to: NSPoint(x: left, y: mid + sin(0) * amplitude))
+        while x < width {
+            x = min(width, x + max(0.5, s / 256))
+            path.line(to: NSPoint(x: left + x, y: mid + sin(x / wavelength * 2 * .pi) * amplitude))
+        }
+        path.stroke()
     }
-    let dot = s * 0.13
-    NSColor.systemRed.setFill()
-    NSBezierPath(ovalIn: NSRect(x: rect.maxX - dot * 1.55, y: rect.maxY - dot * 1.55, width: dot, height: dot)).fill()
     NSGraphicsContext.restoreGraphicsState()
     return rep.representation(using: .png, properties: [:])
 }
@@ -40,6 +54,8 @@ for base in [16, 32, 128, 256, 512] {
         try render(size: base * scale)?.write(to: iconset.appendingPathComponent(name))
     }
 }
+// A preview next to the .icns, to look at the icon without installing.
+try render(size: 512)?.write(to: output.deletingPathExtension().appendingPathExtension("png"))
 let iconutil = Process()
 iconutil.executableURL = URL(fileURLWithPath: "/usr/bin/iconutil")
 iconutil.arguments = ["-c", "icns", iconset.path, "-o", output.path]

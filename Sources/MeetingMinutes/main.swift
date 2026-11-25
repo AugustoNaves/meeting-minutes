@@ -2,7 +2,7 @@ import AppKit
 import AVFoundation
 
 // Command-line mode (diagnostics and reprocessing), e.g.:
-//   "/Applications/Meeting Minutes.app/Contents/MacOS/MeetingMinutes" --diagnose
+//   "/Applications/Prosa.app/Contents/MacOS/MeetingMinutes" --diagnose
 if CommandLine.arguments.count > 1, CommandLine.arguments[1].hasPrefix("--") {
     exit(CommandLineMode.run(Array(CommandLine.arguments.dropFirst())))
 }

@@ -83,7 +83,7 @@ enum SystemAudioTester {
 enum Onboarding {
     static func run(status: @escaping (String?) -> Void) async {
         Dialog.show(
-            "Welcome to Meeting Minutes",
+            "Welcome to Prosa",
             """
             The app lives in the menu bar and records your meetings with a keyboard shortcut: your voice (microphone) and everyone else's (the Mac's audio). When you stop, it transcribes everything on this Mac and saves the minutes as Markdown.
 
@@ -182,7 +182,7 @@ enum Onboarding {
     private static func microphoneDenied() {
         let choice = Dialog.show(
             "No microphone access",
-            "Without this permission your voice will not be in the minutes. Open System Settings › Privacy & Security › Microphone and turn on “Meeting Minutes”.",
+            "Without this permission your voice will not be in the minutes. Open System Settings › Privacy & Security › Microphone and turn on “Prosa”.",
             buttons: ["Open Settings", "Not Now"],
             style: .warning
         )
@@ -217,7 +217,7 @@ enum Onboarding {
             let choice = Dialog.show(
                 "I couldn't capture system audio",
                 """
-                Open System Settings › Privacy & Security › Screen & System Audio Recording and turn on “Meeting Minutes” under “System Audio Recording Only”. Then come back and click “Test Again”.
+                Open System Settings › Privacy & Security › Screen & System Audio Recording and turn on “Prosa” under “System Audio Recording Only”. Then come back and click “Test Again”.
 
                 Also make sure the Mac's volume is not at zero or muted.
                 """,
@@ -243,7 +243,7 @@ enum Onboarding {
         } catch {
             let choice = Dialog.show(
                 "No access to the minutes folder",
-                "The minutes are saved in \(Paths.minutesFolder.path). Open System Settings › Privacy & Security › Files & Folders and allow “Meeting Minutes” to use the Documents folder.",
+                "The minutes are saved in \(Paths.minutesFolder.path). Open System Settings › Privacy & Security › Files & Folders and allow “Prosa” to use the Documents folder.",
                 buttons: ["Open Settings", "Not Now"],
                 style: .warning
             )
@@ -268,7 +268,7 @@ enum Onboarding {
         Log.info("Notifications \(Notifier.describe(status)) during setup.")
         let choice = Dialog.show(
             "Notifications are off",
-            "Without notifications, “Minutes ready” only shows on the menu bar icon (with a sound). To get the notification, open System Settings › Notifications › Meeting Minutes and turn on “Allow notifications”.",
+            "Without notifications, “Minutes ready” only shows on the menu bar icon (with a sound). To get the notification, open System Settings › Notifications › Prosa and turn on “Allow notifications”.",
             buttons: ["Open Settings", "Keep It Off"]
         )
         if choice == 0 { SystemSettingsPane.open(SystemSettingsPane.notifications) }
@@ -280,7 +280,7 @@ enum Onboarding {
         guard !AXIsProcessTrusted() else { return }
         let choice = Dialog.show(
             "Typing by voice",
-            "For dictation to type into the app you are using (\(DictationHotKeyPresets.current?.title ?? "the dictation shortcut")), macOS needs to allow Meeting Minutes under Privacy & Security › Accessibility. Click “Allow…”, then turn on Meeting Minutes in the list that opens.",
+            "For dictation to type into the app you are using (\(DictationHotKeyPresets.current?.title ?? "the dictation shortcut")), macOS needs to allow Prosa under Privacy & Security › Accessibility. Click “Allow…”, then turn on Prosa in the list that opens.",
             buttons: ["Allow…", "Later"]
         )
         guard choice == 0 else { return }

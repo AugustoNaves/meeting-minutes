@@ -62,7 +62,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             if pending > 0 {
                 Notifier.shared.post(
                     title: "\(pending) recording(s) without minutes",
-                    body: "Open the Meeting Minutes menu and choose “Process Pending Recordings”.",
+                    body: "Open the Prosa menu and choose “Process Pending Recordings”.",
                     sound: false
                 )
             }
@@ -270,12 +270,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // MARK: - Menu bar
 
+    /// The app's own menu bar mark when idle: the two Calçadão waves (a template image, so it
+    /// follows the menu bar's light or dark look).
+    private static let wavesSymbol = "prosa.waves"
+    private static let wavesGlyph: NSImage = {
+        let image = NSImage(size: NSSize(width: 22, height: 16), flipped: false) { rect in
+            NSColor.black.setStroke()
+            for y in [10.5, 5.5] as [CGFloat] {
+                let path = NSBezierPath()
+                path.lineWidth = 1.9
+                path.lineCapStyle = .round
+                var x: CGFloat = 2.5
+                path.move(to: NSPoint(x: x, y: y + sin(x / 2.6) * 1.8))
+                while x < rect.width - 2.5 {
+                    x = min(rect.width - 2.5, x + 0.5)
+                    path.line(to: NSPoint(x: x, y: y + sin(x / 2.6) * 1.8))
+                }
+                path.stroke()
+            }
+            return true
+        }
+        image.isTemplate = true
+        image.accessibilityDescription = "Prosa"
+        return image
+    }()
+
     private func updateStatusButton() {
         guard let button = statusItem?.button else { return }
-        var symbol = "waveform.circle"
+        var symbol = Self.wavesSymbol
         var color: NSColor?
         var title = ""
-        var tooltip = "Meeting Minutes — \(HotKeyPresets.current.title) to record"
+        var tooltip = "Prosa — \(HotKeyPresets.current.title) to record"
 
         if dictation.state == .listening {
             symbol = "mic.fill"
@@ -313,7 +338,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             title = " " + badge.text
         }
 
-        if var image = NSImage(systemSymbolName: symbol, accessibilityDescription: "Meeting Minutes") {
+        if symbol == Self.wavesSymbol {
+            button.image = Self.wavesGlyph
+            button.imagePosition = title.isEmpty ? .imageOnly : .imageLeading
+        } else if var image = NSImage(systemSymbolName: symbol, accessibilityDescription: "Prosa") {
             if let color, let colored = image.withSymbolConfiguration(NSImage.SymbolConfiguration(paletteColors: [color])) {
                 image = colored
                 image.isTemplate = false
@@ -419,7 +447,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(permissions)
         menu.addItem(item("Show Log", #selector(openLog)))
         menu.addItem(.separator())
-        menu.addItem(item("Quit Meeting Minutes", #selector(quit)))
+        menu.addItem(item("Quit Prosa", #selector(quit)))
     }
 
     private func addLanguageMenu(to menu: NSMenu) {
@@ -747,7 +775,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             if delivery == .copied {
                 Notifier.shared.post(
                     title: "Text copied — press ⌘V",
-                    body: "To have dictation type by itself, allow Meeting Minutes in System Settings › Privacy & Security › Accessibility.",
+                    body: "To have dictation type by itself, allow Prosa in System Settings › Privacy & Security › Accessibility.",
                     sound: false
                 )
                 showBadgeIfNotificationsOff(Badge(text: "Copied — press ⌘V", symbol: "doc.on.clipboard", color: .systemBlue))
@@ -769,7 +797,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if !dictationHotKeyOK && announceFailure {
             Notifier.shared.post(
                 title: "Dictation shortcut \(preset.title) unavailable",
-                body: "Another app already uses this combination. Pick another one in the Meeting Minutes menu, under Dictation."
+                body: "Another app already uses this combination. Pick another one in the Prosa menu, under Dictation."
             )
         }
     }
@@ -851,7 +879,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if !hotKeyOK && announceFailure {
             Notifier.shared.post(
                 title: "Shortcut \(HotKeyPresets.current.title) unavailable",
-                body: "Another app already uses this combination. Pick another shortcut in the Meeting Minutes menu."
+                body: "Another app already uses this combination. Pick another shortcut in the Prosa menu."
             )
         }
     }

@@ -740,7 +740,7 @@ final class DictationController {
         if !mayType {
             Notifier.shared.post(
                 title: "Dictation will be copied this time",
-                body: "To type into other apps, turn on Meeting Minutes in System Settings › Privacy & Security › Accessibility.",
+                body: "To type into other apps, turn on Prosa in System Settings › Privacy & Security › Accessibility.",
                 sound: false
             )
         }

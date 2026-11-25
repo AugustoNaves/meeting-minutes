@@ -7,9 +7,9 @@
 	<key>CFBundleIdentifier</key>
 	<string>local.meetingminutes</string>
 	<key>CFBundleName</key>
-	<string>Meeting Minutes</string>
+	<string>Prosa</string>
 	<key>CFBundleDisplayName</key>
-	<string>Meeting Minutes</string>
+	<string>Prosa</string>
 	<key>CFBundleExecutable</key>
 	<string>MeetingMinutes</string>
 	<key>CFBundleIconFile</key>
@@ -31,11 +31,11 @@
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Meeting Minutes uses the microphone to record your voice during meetings.</string>
+	<string>Prosa uses the microphone to record your voice during meetings.</string>
 	<key>NSAudioCaptureUsageDescription</key>
-	<string>Meeting Minutes records system audio to capture the other people on the call.</string>
+	<string>Prosa records system audio to capture the other people on the call.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Meeting Minutes transcribes meetings on this Mac, without sending the audio anywhere.</string>
+	<string>Prosa transcribes meetings on this Mac, without sending the audio anywhere.</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

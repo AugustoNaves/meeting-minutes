@@ -238,7 +238,7 @@ final class SystemAudioCapture {
     private func startTap() throws {
         let description = CATapDescription(stereoGlobalTapButExcludeProcesses: [])
         description.uuid = UUID()
-        description.name = "Meeting Minutes"
+        description.name = "Prosa"
         description.isPrivate = true
         description.muteBehavior = .unmuted
 
@@ -269,7 +269,7 @@ final class SystemAudioCapture {
         }
 
         let aggregate: [String: Any] = [
-            kAudioAggregateDeviceNameKey: "Meeting Minutes (system audio)",
+            kAudioAggregateDeviceNameKey: "Prosa (system audio)",
             kAudioAggregateDeviceUIDKey: "local.meetingminutes.aggregate.\(UUID().uuidString)",
             kAudioAggregateDeviceMainSubDeviceKey: outputUID,
             kAudioAggregateDeviceIsPrivateKey: true,

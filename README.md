@@ -1,4 +1,6 @@
-# Meeting Minutes
+# Prosa
+
+*Prosa* is Brazilian Portuguese for a chat (“trocar uma prosa”) and also for written prose: speech that becomes text. The icon shows the waves of Copacabana's sidewalk.
 
 A macOS menu bar app that records your meetings with one keyboard shortcut: **your voice** (microphone) and **everyone else** (the sound your Mac is playing). When you stop, it transcribes everything **on your Mac** and saves structured meeting minutes as a Markdown file.
 
@@ -42,14 +44,14 @@ Without any of the three minutes writers, the app still works, but the `.md` onl
 Clone the repository and run the installer:
 
 ```bash
-git clone https://github.com/AugustoNaves/meeting-minutes.git
+git clone https://github.com/AugustoNaves/prosa.git
 ```
 
 ```bash
-cd meeting-minutes && ./scripts/install.sh
+cd prosa && ./scripts/install.sh
 ```
 
-The script builds the app (about a minute the first time), copies it to `/Applications/Meeting Minutes.app` and opens it. No password or Apple developer account needed: the app is signed locally (ad-hoc).
+The script builds the app (about a minute the first time), copies it to `/Applications/Prosa.app` and opens it. No password or Apple developer account needed: the app is signed locally (ad-hoc).
 
 ### First launch
 
@@ -79,7 +81,7 @@ Files are saved as `~/Documents/Meeting Minutes/YYYY-MM-DD_HH-MM_Meeting.md`.
 
 The shortcut works with any app in front, including full-screen apps.
 
-> **Heads-up:** in Chrome and Safari, ⌘⇧R is also "hard reload". While Meeting Minutes is running, the shortcut belongs to it. If you use that browser command a lot, pick another shortcut in the menu (**Shortcut:** ⌃⌥⌘R, ⌥⇧R or ⌃⇧M).
+> **Heads-up:** in Chrome and Safari, ⌘⇧R is also "hard reload". While Prosa is running, the shortcut belongs to it. If you use that browser command a lot, pick another shortcut in the menu (**Shortcut:** ⌃⌥⌘R, ⌥⇧R or ⌃⇧M).
 
 ### Dictation (type by voice)
 
@@ -103,7 +105,7 @@ Live typing is careful with your text:
 
 Turn off **Type as You Speak** to have the whole text pasted once, at the end.
 
-Typing into other apps needs **Meeting Minutes** turned on in *Privacy & Security › Accessibility*. The first-launch setup asks for it, and so does the first dictation if it is still off; until it is on, the text goes to the clipboard and a notification asks you to press ⌘V. Every reinstall turns it off again (see section 6). The log says, for every dictation, whether it typed live and why not.
+Typing into other apps needs **Prosa** turned on in *Privacy & Security › Accessibility*. The first-launch setup asks for it, and so does the first dictation if it is still off; until it is on, the text goes to the clipboard and a notification asks you to press ⌘V. Every reinstall turns it off again (see section 6). The log says, for every dictation, whether it typed live and why not.
 
 The shortcut can be changed (or dictation turned off) in the menu, under **Dictation**.
 
@@ -225,7 +227,7 @@ Estimate for **one hour of meeting** (about 15,000 transcript tokens): Opus ≈ 
 ## 5. Troubleshooting
 
 **The minutes only have my lines (nobody else).**
-The system audio permission is not active. Open *System Settings › Privacy & Security › Screen & System Audio Recording* and turn on **Meeting Minutes** under **System Audio Recording Only**, or use **Check Permissions…** in the menu, which tests it with a sound. The `.md` itself shows a warning at the top when the system track was completely silent.
+The system audio permission is not active. Open *System Settings › Privacy & Security › Screen & System Audio Recording* and turn on **Prosa** under **System Audio Recording Only**, or use **Check Permissions…** in the menu, which tests it with a sound. The `.md` itself shows a warning at the top when the system track was completely silent.
 
 **The minutes don't have my lines.**
 It is almost always the wrong microphone. Wired headphones **without a microphone** make the Mac show an "External Microphone" that only picks up hiss, and it becomes the system default. In the app menu, open **Microphone › Test Microphone…**; if it does not hear your voice, pick the Mac's microphone in the same menu. Also check *System Settings › Privacy & Security › Microphone*.
@@ -240,7 +242,7 @@ Your voice or the other people's audio could not be recorded, or stopped and cou
 When a recording of 2 minutes or more gives fewer than 5 words per minute, something went wrong with the audio, so the app keeps it in `Audio/` inside the minutes folder (`…_you.m4a` and `…_meeting.m4a`) and says so at the top of the `.md`. You can listen to it, or transcribe it from Terminal with `--transcribe` (see below).
 
 **Dictation only copies the text (a notification says to press ⌘V).**
-Meeting Minutes is not allowed to type into other apps yet. Open the menu › **Dictation** › **Allow Typing into Other Apps…** and turn on **Meeting Minutes** in *Privacy & Security › Accessibility*. After every reinstall it has to be turned on again.
+Prosa is not allowed to type into other apps yet. Open the menu › **Dictation** › **Allow Typing into Other Apps…** and turn on **Prosa** in *Privacy & Security › Accessibility*. After every reinstall it has to be turned on again.
 
 **The dictation shortcut does nothing.**
 Another app (Raycast, ChatGPT, Alfred…) already uses ⌥Space; the menu shows a warning. Pick another shortcut under **Dictation**.
@@ -260,7 +262,7 @@ The recording is kept. Open the app and use **Process Pending Recordings**.
 **Diagnostics from Terminal:**
 
 ```bash
-"/Applications/Meeting Minutes.app/Contents/MacOS/MeetingMinutes" --diagnose
+"/Applications/Prosa.app/Contents/MacOS/MeetingMinutes" --diagnose
 ```
 
 It shows the app's permissions, the meeting language, whether the speech model is installed, who writes the minutes and how many recordings are pending. The same binary also accepts `--transcribe <audio>`, `--process <folder>`, `--regenerate <file.md>`, `--dictate <audio>` (runs dictation on an audio file and prints each stage; nothing is typed), `--dictate-live <audio>` (plays an audio file into live dictation at real speed and prints what would be typed while speaking and at the end) and `--learn-glossary` (updates the glossary now).
@@ -274,7 +276,7 @@ After changing the code (or pulling a new version), run `./scripts/install.sh` a
 To uninstall:
 
 ```bash
-osascript -e 'tell application id "local.meetingminutes" to quit'; rm -rf "/Applications/Meeting Minutes.app" ~/Library/Application\ Support/MeetingMinutes; tccutil reset All local.meetingminutes; defaults delete local.meetingminutes
+osascript -e 'tell application id "local.meetingminutes" to quit'; rm -rf "/Applications/Prosa.app" ~/Library/Application\ Support/MeetingMinutes; tccutil reset All local.meetingminutes; defaults delete local.meetingminutes
 ```
 
 Your minutes in `~/Documents/Meeting Minutes` are not deleted.

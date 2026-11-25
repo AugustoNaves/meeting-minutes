@@ -244,7 +244,7 @@ enum Keychain {
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
-            kSecAttrLabel as String: "Meeting Minutes – Claude API key",
+            kSecAttrLabel as String: "Prosa – Claude API key",
             kSecValueData as String: Data(key.utf8),
         ]
         return SecItemAdd(attributes as CFDictionary, nil) == errSecSuccess
