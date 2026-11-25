@@ -296,6 +296,19 @@ It shows the app's permissions, the meeting language, whether the speech model i
 
 ---
 
+### Measuring how well it does
+
+`Tests/Evaluation/evaluate.py` synthesizes speech with known text, runs it through the same code the app uses and reports, for dictation, the word error rate (raw, with the glossary, with the AI), names spelled right, how fast the first word appears and how fast the final text is ready; and, for meetings, the error rate per speaker, whether each line got the right speaker, echo lines and whether the minutes contain the expected decisions and tasks.
+
+```bash
+python3 Tests/Evaluation/evaluate.py          # on-device steps only
+python3 Tests/Evaluation/evaluate.py --ai     # also the AI chosen in the menu
+```
+
+Synthetic speech is easier than real people: add your own recordings to `Tests/Evaluation/real/` (see the README there) for more honest numbers.
+
+`Tests/Evaluation/compare_engines.py` runs the same audio through Apple's recognizer and Whisper (whisper.cpp, with and without the glossary as its prompt), to see whether Whisper could be the engine on Windows and Linux.
+
 ## 6. Update, reinstall and uninstall
 
 After changing the code (or pulling a new version), run `./scripts/install.sh` again. Because every build gets a new local signature, the installer resets the old permissions and the app asks for them again on launch (it is quick).

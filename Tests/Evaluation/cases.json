@@ -1,0 +1,36 @@
+{
+  "voice": "Luciana",
+  "dictation": [
+    {"id": "d01", "name": "Frase simples", "text": "Bom dia, tudo bem? Vou te mandar o relatório até o fim do dia."},
+    {"id": "d02", "name": "Nomes e marcas", "text": "A Joana pediu para o Thiago revisar a proposta do Nubank antes da reunião de sexta.", "terms": ["Joana", "Thiago", "Nubank"]},
+    {"id": "d03", "name": "Jargão técnico", "text": "Depois do code review, a gente faz o deploy no Kubernetes e atualiza o board no Jira.", "terms": ["Kubernetes", "Jira"]},
+    {"id": "d04", "name": "Números e horários", "text": "A reunião ficou para o dia 15 de março, às 14h30, com 12 pessoas confirmadas."},
+    {"id": "d05", "name": "Autocorreção", "text": "Manda o contrato na terça, não, na quarta de manhã.", "clean_expect_absent": ["terça"], "clean_expect_present": ["quarta"]},
+    {"id": "d06", "name": "Hesitações", "text": "É, tipo, eu acho que a gente precisa, né, rever o prazo do projeto.", "clean_expect_absent": ["tipo", "né"]},
+    {"id": "d07", "name": "Pergunta", "text": "Você consegue me enviar a planilha atualizada ainda hoje?"},
+    {"id": "d08", "name": "Ditado longo", "text": "Pessoal, segue o resumo da semana. O time de produto terminou o protótipo do aplicativo e vai apresentar na segunda-feira. O time comercial fechou três contratos novos e ainda espera a resposta de dois clientes. Para a próxima semana, a prioridade é revisar o orçamento, contratar mais uma pessoa para o suporte e preparar a apresentação para a diretoria. Qualquer dúvida, me chamem."},
+    {"id": "d09", "name": "Pausa no meio", "parts": ["Primeiro, vamos fechar o orçamento.", "Depois, a gente define a data de lançamento com o time do iFood."], "pause": 2.5, "terms": ["iFood"]},
+    {"id": "d10", "name": "Ruído de fundo (10 dB)", "from": "d02", "snr": 10},
+    {"id": "d11", "name": "Fala rápida", "from": "d02", "rate": 235},
+    {"id": "d12", "name": "Qualidade de telefone (8 kHz)", "from": "d02", "telephone": true}
+  ],
+  "meetings": [
+    {
+      "id": "m01", "name": "Fone de ouvido (limpo)",
+      "turns": [
+        ["meeting", "Bom dia, pessoal. Hoje a pauta é o lançamento da campanha de fim de ano."],
+        ["you", "Bom dia. Eu trouxe os números do último trimestre, as vendas cresceram doze por cento."],
+        ["meeting", "Ótimo. Então fica decidido que a campanha começa no dia primeiro de dezembro."],
+        ["you", "Combinado. Eu fico responsável por revisar o orçamento até quarta-feira."],
+        ["meeting", "E a Joana envia as artes finais até sexta."],
+        ["you", "Perfeito, então nos falamos na próxima semana."]
+      ],
+      "minutes_expect": {"decisions": [["dezembro"]], "tasks": [["orçamento"], ["artes", "Joana"]]}
+    },
+    {"id": "m02", "name": "Alto-falante (eco no microfone)", "from": "m01", "echo": 0.3},
+    {"id": "m03", "name": "Fala sobreposta", "from": "m01", "overlap": 1.5},
+    {"id": "m04", "name": "Sala com ruído (15 dB)", "from": "m01", "mic_snr": 15},
+    {"id": "m05", "name": "Reunião longa (~5 min)", "from": "m01", "repeat": 8},
+    {"id": "m06", "name": "Gravação vazia (3 min, uma palavra)", "silence": 180, "word": "Oi."}
+  ]
+}

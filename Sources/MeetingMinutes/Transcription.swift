@@ -112,6 +112,21 @@ enum Transcription {
                 words = [TimedWord(start: result.range.start.seconds, end: result.range.end.seconds, text: whole)]
             }
         }
-        return Phrase(words: words)
+        return Phrase(words: trimLeadingSilence(words))
+    }
+
+    /// The recognizer stretches the first word after a silence back over that silence ("Ótimo"
+    /// from 11.8 s to 13.3 s when it was said at 12.7 s). Left as is, a sentence is dated up to
+    /// ~2 s early, which can put it before what the other person said just before it. A word much
+    /// longer than the others has its start moved to its end minus a normal word length.
+    static func trimLeadingSilence(_ words: [TimedWord]) -> [TimedWord] {
+        let durations = words.map { $0.end - $0.start }.filter { $0 > 0 }.sorted()
+        guard !durations.isEmpty else { return words }
+        let typical = min(0.6, max(0.2, durations[durations.count / 2]))
+        let longest = max(0.7, typical * 2.5)
+        return words.map { word in
+            guard word.end - word.start > longest else { return word }
+            return TimedWord(start: word.end - typical * 1.5, end: word.end, text: word.text)
+        }
     }
 }
