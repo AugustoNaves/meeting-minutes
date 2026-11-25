@@ -307,6 +307,8 @@ python3 Tests/Evaluation/evaluate.py --ai     # also the AI chosen in the menu
 
 Synthetic speech is easier than real people: add your own recordings to `Tests/Evaluation/real/` (see the README there) for more honest numbers.
 
+`Tests/Evaluation/compare_engines.py` runs the same audio through Apple's recognizer and Whisper (whisper.cpp, with and without the glossary as its prompt), to see whether Whisper could be the engine on Windows and Linux.
+
 ## 6. Update, reinstall and uninstall
 
 After changing the code (or pulling a new version), run `./scripts/install.sh` again. Because every build gets a new local signature, the installer resets the old permissions and the app asks for them again on launch (it is quick).
