@@ -106,16 +106,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     /// meetingminutes://toggle, meetingminutes://start and meetingminutes://stop
-    /// (handy for macOS Shortcuts, Raycast, Stream Deck…).
+    /// (handy for macOS Shortcuts, Raycast, Stream Deck…). Any app or web page can open such a
+    /// link, so a link that would START a recording asks first (unless you chose “Always Allow”).
+    /// Stopping is always allowed.
     func application(_ application: NSApplication, open urls: [URL]) {
         for url in urls where url.scheme == "meetingminutes" {
             switch url.host {
-            case "toggle": toggleRecording()
-            case "start": startRecording()
-            case "stop": stopRecording()
-            default: break
+            case "toggle":
+                if recorder.isRecording { stopRecording() } else if linkMayStartRecording() { startRecording() }
+            case "start":
+                if !recorder.isRecording, linkMayStartRecording() { startRecording() }
+            case "stop":
+                stopRecording()
+            default:
+                break
             }
         }
+    }
+
+    private func linkMayStartRecording() -> Bool {
+        if Settings.shared.linksMayStartRecording { return true }
+        let choice = Dialog.show(
+            "Start recording?",
+            "A link (from a shortcut, an app or a web page) asked Prosa to start recording your microphone and the sound of your Mac.\n\nIf you did not ask for this, click Cancel.",
+            buttons: ["Start Recording", "Cancel", "Always Allow Links"],
+            style: .warning
+        )
+        if choice == 2 {
+            Settings.shared.linksMayStartRecording = true
+            Log.info("Links may now start recordings without asking.")
+            return true
+        }
+        Log.info(choice == 0 ? "A link started a recording (confirmed)." : "A link tried to start a recording; it was cancelled.")
+        return choice == 0
     }
 
     // MARK: - Recording

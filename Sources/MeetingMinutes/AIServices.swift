@@ -103,9 +103,16 @@ enum CompatibleService: String, CaseIterable {
         nonmutating set { UserDefaults.standard.set(newValue, forKey: defaultsPrefix + "models") }
     }
 
+    /// Keys may only travel encrypted (https), except to services on this Mac (Ollama, LM Studio).
+    static func isSafeAddress(_ url: URL) -> Bool {
+        if url.scheme == "https" { return true }
+        guard url.scheme == "http", let host = url.host?.lowercased() else { return false }
+        return host == "localhost" || host == "127.0.0.1" || host == "::1" || host == "[::1]"
+    }
+
     /// Ready to use: address, key (if needed) and a model.
     var connection: Connection? {
-        guard let base = baseURL.flatMap(URL.init(string:)), let model, !model.isEmpty else { return nil }
+        guard let base = baseURL.flatMap(URL.init(string:)), Self.isSafeAddress(base), let model, !model.isEmpty else { return nil }
         let key = self.key
         if needsKey && key == nil { return nil }
         return Connection(service: self, baseURL: base, key: key, model: model)
@@ -139,6 +146,7 @@ enum CompatibleService: String, CaseIterable {
 
     /// Lists the models the service offers (GET /models).
     static func listModels(baseURL: URL, key: String?, service: CompatibleService) async throws -> [String] {
+        guard isSafeAddress(baseURL) else { throw ServiceError.message(insecureAddress) }
         var request = URLRequest(url: baseURL.appendingPathComponent("models"))
         request.timeoutInterval = 20
         if let key { request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization") }
@@ -153,6 +161,7 @@ enum CompatibleService: String, CaseIterable {
     /// Sends one request and returns the text of the answer. With a schema it first asks for
     /// strict JSON; services that do not support that get a plain JSON request instead.
     static func complete(_ request: MinutesGenerator.AIRequest, connection: Connection) async throws -> String {
+        guard isSafeAddress(connection.baseURL) else { throw ServiceError.message(insecureAddress) }
         var modes: [String?] = request.schema == nil ? [nil] : ["json_schema", "json_object", nil]
         var lastError: Error = ServiceError.message("\(connection.service.shortTitle): no answer")
         while !modes.isEmpty {
@@ -202,6 +211,8 @@ enum CompatibleService: String, CaseIterable {
         }
         throw lastError
     }
+
+    static let insecureAddress = "The address must start with https:// (http:// is only allowed for services on this Mac, like Ollama or LM Studio), so your key and text travel encrypted."
 
     private static func send(_ request: URLRequest, service: CompatibleService) async throws -> (Data, URLResponse) {
         do {
@@ -255,7 +266,11 @@ enum AISetup {
                 "Compatible service",
                 "Paste the service's API address. Examples: https://openrouter.ai/api/v1 (OpenRouter), https://api.groq.com/openai/v1 (Groq), http://localhost:1234/v1 (LM Studio).",
                 placeholder: "https://…/v1", initial: service.baseURL ?? ""
-            ), let url = URL(string: address), url.scheme?.hasPrefix("http") == true else { return false }
+            ), let url = URL(string: address) else { return false }
+            guard CompatibleService.isSafeAddress(url) else {
+                Dialog.show("Address not allowed", CompatibleService.insecureAddress, style: .warning)
+                return false
+            }
             service.baseURL = address.hasSuffix("/") ? String(address.dropLast()) : address
         }
         if service.needsKey || service == .custom {

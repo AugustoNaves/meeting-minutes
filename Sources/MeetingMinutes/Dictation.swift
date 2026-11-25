@@ -266,7 +266,7 @@ final class LiveTyper {
             if event.cgEvent?.getIntegerValueField(.eventSourceUserData) == syntheticEventMarker { return }
             // Keys this app itself sends (letters, ⌫, ⇧←, ⌘V) right after sending them.
             if event.type == .keyDown, [0, 9, 51, 123].contains(event.keyCode), Date().timeIntervalSince(KeyTyper.lastSent) < 0.35 { return }
-            let reason = event.type == .keyDown ? "you pressed a key (code \(event.keyCode))" : "you clicked"
+            let reason = event.type == .keyDown ? "you pressed a key" : "you clicked"
             MainActor.assumeIsolated { self?.stopTyping(reason) }
         }
     }
