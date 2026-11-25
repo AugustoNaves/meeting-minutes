@@ -50,6 +50,25 @@ final class Recorder {
     private var micWriter: TrackWriter?
     private var systemWriter: TrackWriter?
 
+    // Problems found while recording (a track that failed or stopped). Captures report them
+    // from their own queues, so access goes through a lock.
+    private let warningsLock = NSLock()
+    private var currentWarnings: [String] = []
+
+    /// Problems of the recording in progress, to show on the menu bar icon.
+    var liveWarnings: [String] {
+        warningsLock.lock(); defer { warningsLock.unlock() }
+        return currentWarnings
+    }
+
+    private func addWarning(_ warning: String) {
+        warningsLock.lock()
+        let isNew = !currentWarnings.contains(warning)
+        if isNew { currentWarnings.append(warning) }
+        warningsLock.unlock()
+        if isNew { Log.error("Recording problem: \(warning)") }
+    }
+
     /// Starts recording. Returns warnings (e.g. no microphone permission) if only one track works.
     func start() throws -> [String] {
         guard !isRecording else { throw RecorderError.alreadyRecording }
@@ -64,10 +83,12 @@ final class Recorder {
         let systemWriter = try TrackWriter(url: dir.appendingPathComponent(SessionMeta.systemFile), startHostTime: startHost, label: "system")
 
         var warnings: [String] = []
+        warningsLock.lock(); currentWarnings = []; warningsLock.unlock()
 
         switch AVCaptureDevice.authorizationStatus(for: .audio) {
         case .authorized:
             let capture = MicrophoneCapture(deviceUID: Settings.shared.micDeviceUID) { buffer, host in micWriter.append(buffer, hostTime: host) }
+            capture.onProblem = { [weak self] in self?.addWarning($0) }
             do {
                 try capture.start()
                 mic = capture
@@ -79,6 +100,7 @@ final class Recorder {
         }
 
         let capture = SystemAudioCapture { buffer, host in systemWriter.append(buffer, hostTime: host) }
+        capture.onProblem = { [weak self] in self?.addWarning($0) }
         do {
             try capture.start()
             system = capture
@@ -93,6 +115,7 @@ final class Recorder {
             throw RecorderError.nothingToRecord(warnings)
         }
 
+        for warning in warnings { addWarning(warning) }
         meta.warnings = warnings
         meta.save(to: dir)
         self.meta = meta
@@ -113,6 +136,7 @@ final class Recorder {
         let systemResult = systemWriter?.finish()
 
         meta.endDate = Date()
+        meta.warnings = liveWarnings
         meta.micPeak = mic == nil ? nil : micResult?.peak
         meta.systemPeak = system == nil ? nil : systemResult?.peak
         if let peak = meta.systemPeak, peak == 0 {

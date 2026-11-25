@@ -1,9 +1,9 @@
 #!/bin/bash
-# Builds Meeting Minutes, installs it in the Applications folder and opens it.
+# Builds Prosa, installs it in the Applications folder and opens it.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-APP_NAME="Meeting Minutes"
+APP_NAME="Prosa"
 BUNDLE_ID="local.meetingminutes"
 
 ./scripts/build.sh
@@ -21,6 +21,8 @@ pkill -x MeetingMinutes >/dev/null 2>&1 || true
 
 echo "==> Installing in $DEST…"
 rm -rf "$DEST/$APP_NAME.app"
+# The app used to be called "Meeting Minutes": remove the old copy (same app, new name).
+rm -rf "$DEST/Meeting Minutes.app"
 cp -R "build/$APP_NAME.app" "$DEST/"
 
 # Every build gets a new signature. Resetting old permissions avoids macOS showing the app

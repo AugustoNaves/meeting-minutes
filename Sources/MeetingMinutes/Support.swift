@@ -73,7 +73,11 @@ enum Paths {
     }
 
     static var appSupport: URL {
-        home.appendingPathComponent("Library/Application Support/MeetingMinutes", isDirectory: true)
+        // Undocumented override for tests (e.g. `-dataFolder /tmp/x` on the command line).
+        if let custom = UserDefaults.standard.string(forKey: "dataFolder"), !custom.isEmpty {
+            return URL(fileURLWithPath: custom, isDirectory: true)
+        }
+        return home.appendingPathComponent("Library/Application Support/MeetingMinutes", isDirectory: true)
     }
 
     /// Recordings in progress or not processed yet.
@@ -99,6 +103,10 @@ final class Settings {
             "hotKeyPreset": 0,
             "onboardingDone": false,
             "minutesModel": "claude-opus-5-5",
+            "dictationHotKeyPreset": 0,
+            "dictationCleanUp": true,
+            "dictationTypeLive": true,
+            "glossaryAutoLearn": true,
         ])
     }
 
@@ -164,6 +172,42 @@ final class Settings {
         set { defaults.set(newValue, forKey: "micDeviceUID") }
     }
 
+    /// Dictation shortcut (index in DictationHotKeyPresets; -1 = dictation off).
+    var dictationHotKeyPreset: Int {
+        get { defaults.integer(forKey: "dictationHotKeyPreset") }
+        set { defaults.set(newValue, forKey: "dictationHotKeyPreset") }
+    }
+
+    /// Polish each dictation with the AI (punctuation, filler words, glossary) before typing it.
+    var dictationCleanUp: Bool {
+        get { defaults.bool(forKey: "dictationCleanUp") }
+        set { defaults.set(newValue, forKey: "dictationCleanUp") }
+    }
+
+    /// Type the words into the app while they are spoken (corrected in place at the end).
+    var dictationTypeLive: Bool {
+        get { defaults.bool(forKey: "dictationTypeLive") }
+        set { defaults.set(newValue, forKey: "dictationTypeLive") }
+    }
+
+    /// Let the AI add terms and corrections to the glossary on its own.
+    var glossaryAutoLearn: Bool {
+        get { defaults.bool(forKey: "glossaryAutoLearn") }
+        set { defaults.set(newValue, forKey: "glossaryAutoLearn") }
+    }
+
+    /// When the glossary last learned from dictations and minutes.
+    var glossaryLearnedAt: Date? {
+        get { defaults.object(forKey: "glossaryLearnedAt") as? Date }
+        set { defaults.set(newValue, forKey: "glossaryLearnedAt") }
+    }
+
+    /// Dictations since the glossary last learned.
+    var dictationsSinceLearning: Int {
+        get { defaults.integer(forKey: "dictationsSinceLearning") }
+        set { defaults.set(newValue, forKey: "dictationsSinceLearning") }
+    }
+
     var lastMinutesPath: String? {
         get { defaults.string(forKey: "lastMinutesPath") }
         set { defaults.set(newValue, forKey: "lastMinutesPath") }
@@ -175,6 +219,44 @@ final class Settings {
 enum Keychain {
     private static let service = "local.meetingminutes"
     private static let account = "anthropic-api-key"
+
+    /// Keys of the other AI services, one Keychain item each (`account` = the service).
+    static func read(account: String) -> String? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne,
+        ]
+        var item: CFTypeRef?
+        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
+              let data = item as? Data, let key = String(data: data, encoding: .utf8), !key.isEmpty
+        else { return nil }
+        return key
+    }
+
+    @discardableResult
+    static func save(_ key: String, account: String, label: String) -> Bool {
+        delete(account: account)
+        let attributes: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecAttrLabel as String: label,
+            kSecValueData as String: Data(key.utf8),
+        ]
+        return SecItemAdd(attributes as CFDictionary, nil) == errSecSuccess
+    }
+
+    static func delete(account: String) {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+        ]
+        SecItemDelete(query as CFDictionary)
+    }
 
     static func readAPIKey() -> String? {
         let query: [String: Any] = [
@@ -200,7 +282,7 @@ enum Keychain {
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
-            kSecAttrLabel as String: "Meeting Minutes – Claude API key",
+            kSecAttrLabel as String: "Prosa – Claude API key",
             kSecValueData as String: Data(key.utf8),
         ]
         return SecItemAdd(attributes as CFDictionary, nil) == errSecSuccess

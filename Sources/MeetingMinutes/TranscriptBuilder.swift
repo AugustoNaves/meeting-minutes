@@ -57,6 +57,11 @@ enum TranscriptBuilder {
         return merged
     }
 
+    /// Number of words in the transcript.
+    static func wordCount(_ lines: [TranscriptLine]) -> Int {
+        lines.reduce(0) { $0 + $1.text.split(whereSeparator: \.isWhitespace).count }
+    }
+
     static func markdown(_ lines: [TranscriptLine], strings: MinutesStrings) -> String {
         lines.map { "**[\(Formatting.clock($0.start))] [\($0.speaker.label(strings))]:** \($0.text)" }
             .joined(separator: "\n\n")

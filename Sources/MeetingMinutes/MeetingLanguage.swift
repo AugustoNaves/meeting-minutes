@@ -83,6 +83,9 @@ enum MeetingLanguage {
 
     // MARK: - Tables (languages without a table use English headings)
 
+    /// The "[You]" label in every built-in language (to tell your lines apart when reading).
+    static var youLabels: Set<String> { Set([english.you] + tables.values.map(\.you)) }
+
     static let english = MinutesStrings(
         title: "Meeting Minutes", summary: "Executive Summary", topics: "Key Topics Discussed",
         decisions: "Decisions Made", nextSteps: "Next Steps / Action Items", owner: "Owner",

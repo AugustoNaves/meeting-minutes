@@ -1,9 +1,9 @@
 #!/bin/bash
-# Builds the app and assembles "build/Meeting Minutes.app" (does not install it).
+# Builds the app and assembles "build/Prosa.app" (does not install it).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-APP_NAME="Meeting Minutes"
+APP_NAME="Prosa"
 BUNDLE_ID="local.meetingminutes"
 APP="build/$APP_NAME.app"
 
