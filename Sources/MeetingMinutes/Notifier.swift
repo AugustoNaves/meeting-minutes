@@ -67,7 +67,13 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
         guard let path = response.notification.request.content.userInfo["path"] as? String else { return }
         await MainActor.run {
-            _ = NSWorkspace.shared.open(URL(fileURLWithPath: path))
+            let url = URL(fileURLWithPath: path)
+            // Minutes open in Prosa's own viewer; anything else (the glossary) in its default app.
+            if url.pathExtension == "md", url.lastPathComponent.contains("_Meeting") {
+                MinutesViewer.shared.show(selecting: url)
+            } else {
+                _ = NSWorkspace.shared.open(url)
+            }
         }
     }
 }

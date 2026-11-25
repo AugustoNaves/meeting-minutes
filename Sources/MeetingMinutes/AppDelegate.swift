@@ -224,6 +224,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         processingDirectory = nil
         processingStep = nil
         Settings.shared.lastMinutesPath = outcome.fileURL.path
+        MinutesViewer.shared.minutesChanged(selecting: outcome.fileURL)
         showBadgeIfNotificationsOff(
             outcome.minutesGenerated
                 ? Badge(text: "Minutes ready", symbol: "checkmark.circle.fill", color: .systemGreen)
@@ -409,10 +410,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(item(recorder.isRecording ? "Stop Recording" : "Start Recording", #selector(toggleFromMenu)))
         menu.addItem(.separator())
 
-        menu.addItem(item("Open Minutes Folder", #selector(openMinutesFolder)))
+        menu.addItem(item("Open Minutes…", #selector(openMinutesViewer)))
         if let last = Settings.shared.lastMinutesPath, FileManager.default.fileExists(atPath: last) {
             menu.addItem(item("Open Latest Minutes", #selector(openLastMinutes)))
         }
+        menu.addItem(item("Open Minutes Folder", #selector(openMinutesFolder)))
         let regenerate = item("Regenerate Minutes from .md…", #selector(regenerateFromFile))
         regenerate.isEnabled = !regenerating
         menu.addItem(regenerate)
@@ -613,8 +615,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func openLastMinutes() {
         guard let path = Settings.shared.lastMinutesPath else { return }
-        NSWorkspace.shared.open(URL(fileURLWithPath: path))
+        MinutesViewer.shared.show(selecting: URL(fileURLWithPath: path))
     }
+
+    @objc private func openMinutesViewer() { MinutesViewer.shared.show() }
 
     @objc private func processPending() {
         for directory in recorder.pendingSessions() { enqueue(directory) }

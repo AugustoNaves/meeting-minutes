@@ -152,8 +152,9 @@ The headings and the `[You]` / `[Meeting]` labels follow the meeting language (b
 | Item | What it does |
 |---|---|
 | Start / Stop Recording | Same as the shortcut |
+| Open Minutes… | Opens Prosa's reader: every meeting in a list (newest first), the minutes formatted on the right, a search over all minutes and transcripts, and buttons to copy the minutes or open the `.md`. Clicking a "Minutes ready" notification opens it too |
 | Open Minutes Folder | Opens the folder where the minutes are saved |
-| Open Latest Minutes | Opens the last `.md` written |
+| Open Latest Minutes | Opens the last minutes in the reader |
 | Regenerate Minutes from .md… | Sends the transcript of an existing `.md` to the AI again and rewrites the minutes part (useful if the internet dropped at the time) |
 | Process Pending Recordings | Shows up only if a recording did not become minutes (app quit mid-way, error) |
 | Meeting Language | The language spoken in your meetings: drives transcription and the language of the minutes |
@@ -318,6 +319,7 @@ Sources/MeetingMinutes/
   MinutesGenerator.swift          Minutes through Claude Code, Gemini (Antigravity) or the Claude API
   Processing.swift                From audio to .md; regenerate minutes from an .md
   Onboarding.swift                First launch and permissions
+  MinutesViewer.swift             The minutes reader window (list, search, formatted minutes)
   Notifier.swift                  Notifications
   Support.swift                   Log, folders, settings, Keychain, helpers
 ```
