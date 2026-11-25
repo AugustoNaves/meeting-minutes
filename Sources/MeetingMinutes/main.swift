@@ -174,6 +174,7 @@ enum CommandLineMode {
         let corrected = Glossary.load().apply(to: raw)
         let edit = LiveTyper.edit(from: typed.current(), to: corrected)
         print("        corrects: \(describe(edit))")
+        print("Heard:  \(raw)")
         print("Final:  \(corrected)")
         if Settings.shared.dictationCleanUp {
             let outcome = await DictationPipeline.polish(raw: raw, corrected: corrected)

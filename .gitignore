@@ -3,3 +3,11 @@ build/
 .swiftpm/
 *.xcodeproj
 .DS_Store
+
+# Evaluation: personal recordings and results stay local
+Tests/Evaluation/real/*.m4a
+Tests/Evaluation/real/*.wav
+Tests/Evaluation/real/*.mp3
+Tests/Evaluation/real/*.aiff
+Tests/Evaluation/real/*.txt
+Tests/Evaluation/results/
