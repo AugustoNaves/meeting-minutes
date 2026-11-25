@@ -73,7 +73,11 @@ enum Paths {
     }
 
     static var appSupport: URL {
-        home.appendingPathComponent("Library/Application Support/MeetingMinutes", isDirectory: true)
+        // Undocumented override for tests (e.g. `-dataFolder /tmp/x` on the command line).
+        if let custom = UserDefaults.standard.string(forKey: "dataFolder"), !custom.isEmpty {
+            return URL(fileURLWithPath: custom, isDirectory: true)
+        }
+        return home.appendingPathComponent("Library/Application Support/MeetingMinutes", isDirectory: true)
     }
 
     /// Recordings in progress or not processed yet.
@@ -99,6 +103,10 @@ final class Settings {
             "hotKeyPreset": 0,
             "onboardingDone": false,
             "minutesModel": "claude-opus-5-5",
+            "dictationHotKeyPreset": 0,
+            "dictationCleanUp": true,
+            "dictationTypeLive": true,
+            "glossaryAutoLearn": true,
         ])
     }
 
@@ -162,6 +170,42 @@ final class Settings {
     var micDeviceUID: String? {
         get { defaults.string(forKey: "micDeviceUID") }
         set { defaults.set(newValue, forKey: "micDeviceUID") }
+    }
+
+    /// Dictation shortcut (index in DictationHotKeyPresets; -1 = dictation off).
+    var dictationHotKeyPreset: Int {
+        get { defaults.integer(forKey: "dictationHotKeyPreset") }
+        set { defaults.set(newValue, forKey: "dictationHotKeyPreset") }
+    }
+
+    /// Polish each dictation with the AI (punctuation, filler words, glossary) before typing it.
+    var dictationCleanUp: Bool {
+        get { defaults.bool(forKey: "dictationCleanUp") }
+        set { defaults.set(newValue, forKey: "dictationCleanUp") }
+    }
+
+    /// Type the words into the app while they are spoken (corrected in place at the end).
+    var dictationTypeLive: Bool {
+        get { defaults.bool(forKey: "dictationTypeLive") }
+        set { defaults.set(newValue, forKey: "dictationTypeLive") }
+    }
+
+    /// Let the AI add terms and corrections to the glossary on its own.
+    var glossaryAutoLearn: Bool {
+        get { defaults.bool(forKey: "glossaryAutoLearn") }
+        set { defaults.set(newValue, forKey: "glossaryAutoLearn") }
+    }
+
+    /// When the glossary last learned from dictations and minutes.
+    var glossaryLearnedAt: Date? {
+        get { defaults.object(forKey: "glossaryLearnedAt") as? Date }
+        set { defaults.set(newValue, forKey: "glossaryLearnedAt") }
+    }
+
+    /// Dictations since the glossary last learned.
+    var dictationsSinceLearning: Int {
+        get { defaults.integer(forKey: "dictationsSinceLearning") }
+        set { defaults.set(newValue, forKey: "dictationsSinceLearning") }
     }
 
     var lastMinutesPath: String? {

@@ -96,6 +96,7 @@ enum Onboarding {
         await systemAudioStep()
         documentsStep()
         await notificationsStep()
+        await accessibilityStep()
         await meetingLanguageStep(status: status)
         minutesEngineStep()
         loginItemStep()
@@ -271,6 +272,28 @@ enum Onboarding {
             buttons: ["Open Settings", "Keep It Off"]
         )
         if choice == 0 { SystemSettingsPane.open(SystemSettingsPane.notifications) }
+    }
+
+    // MARK: Accessibility (dictation types into other apps)
+
+    private static func accessibilityStep() async {
+        guard !AXIsProcessTrusted() else { return }
+        let choice = Dialog.show(
+            "Typing by voice",
+            "For dictation to type into the app you are using (\(DictationHotKeyPresets.current?.title ?? "the dictation shortcut")), macOS needs to allow Meeting Minutes under Privacy & Security › Accessibility. Click “Allow…”, then turn on Meeting Minutes in the list that opens.",
+            buttons: ["Allow…", "Later"]
+        )
+        guard choice == 0 else { return }
+        TextInserter.askOnce()
+        // Wait (up to 2 minutes) for the switch to be turned on.
+        let deadline = Date().addingTimeInterval(120)
+        while !AXIsProcessTrusted() && Date() < deadline {
+            try? await Task.sleep(for: .milliseconds(500))
+        }
+        Log.info("Accessibility \(AXIsProcessTrusted() ? "allowed" : "not allowed") during setup.")
+        if AXIsProcessTrusted() {
+            Dialog.show("Typing by voice is ready ✓", "Put the cursor in any text field, hold \(DictationHotKeyPresets.current?.title ?? "the dictation shortcut") and talk.")
+        }
     }
 
     // MARK: Meeting language and speech model

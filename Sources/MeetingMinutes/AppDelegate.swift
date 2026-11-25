@@ -8,6 +8,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let recorder = Recorder()
     private var hotKey: HotKey?
     private var hotKeyOK = true
+    private let dictation = DictationController()
+    private var dictationHotKey: HotKey?
+    private var dictationHotKeyOK = true
+    private var learningGlossary = false
     private var timer: Timer?
 
     // Processing queue: one meeting at a time, to keep the Mac light.
@@ -25,6 +29,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let color: NSColor
     }
     private var badge: Badge?
+    /// How many recording problems the user has already been alerted about.
+    private var alertedWarnings = 0
 
     // MARK: - Lifecycle
 
@@ -39,6 +45,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         Notifier.shared.setUp()
         hotKey = HotKey { [weak self] in self?.toggleRecording() }
         registerHotKey(announceFailure: true)
+        setUpDictation()
         try? Paths.ensure(Paths.sessions)
         Task.detached(priority: .utility) {
             await MeetingLanguage.resolveDefaultIfNeeded()
@@ -74,7 +81,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         Task {
             let notifications = Notifier.describe(await Notifier.shared.authorizationStatus())
-            Log.info("Permissions: microphone \(mic); notifications \(notifications).")
+            Log.info("Permissions: microphone \(mic); notifications \(notifications); typing into other apps \(AXIsProcessTrusted() ? "allowed" : "not allowed").")
         }
     }
 
@@ -127,19 +134,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
             return
         }
+        logPermissions()
         do {
-            let warnings = try recorder.start()
+            _ = try recorder.start()
+            alertedWarnings = 0
             if Settings.shared.playSounds { NSSound(named: "Tink")?.play() }
             startTimer()
-            if !warnings.isEmpty {
-                Notifier.shared.post(title: "Recording, with a warning", body: warnings.joined(separator: " "))
-            }
+            alertNewWarnings()
         } catch {
             NSSound(named: "Basso")?.play()
             Log.error("Could not start recording: \(error.localizedDescription)")
             Notifier.shared.post(title: "Could not record", body: error.localizedDescription)
         }
         updateStatusButton()
+    }
+
+    /// A track failed or stopped: the icon turns orange (see updateStatusButton), a sound plays
+    /// and a notification is posted. The sound and the icon also work with notifications off.
+    private func alertNewWarnings() {
+        let warnings = recorder.liveWarnings
+        guard warnings.count > alertedWarnings else { return }
+        let new = warnings[alertedWarnings...]
+        alertedWarnings = warnings.count
+        NSSound(named: "Basso")?.play()
+        Notifier.shared.post(title: "Recording, with a problem", body: new.joined(separator: " "))
     }
 
     func stopRecording() {
@@ -152,7 +170,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func startTimer() {
         timer?.invalidate()
         let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.updateStatusButton() }
+            MainActor.assumeIsolated {
+                self?.alertNewWarnings()
+                self?.updateStatusButton()
+            }
         }
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
@@ -214,6 +235,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 body: "\(outcome.fileURL.lastPathComponent) — click to open.",
                 fileURL: outcome.fileURL
             )
+            // New minutes = new names spelled from context: a good moment to grow the glossary.
+            if Settings.shared.glossaryAutoLearn { learnGlossary(manual: false) }
         } else {
             Notifier.shared.post(
                 title: "Transcript saved, but no minutes",
@@ -254,11 +277,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         var title = ""
         var tooltip = "Meeting Minutes — \(HotKeyPresets.current.title) to record"
 
-        if recorder.isRecording, let start = recorder.startDate {
+        if dictation.state == .listening {
+            symbol = "mic.fill"
+            color = .systemRed
+            title = ""
+            tooltip = dictation.handsFree
+                ? "Dictating — press \(DictationHotKeyPresets.current?.title ?? "the shortcut") again to type the text"
+                : "Dictating — release the keys to type the text"
+        } else if dictation.state == .finishing {
+            symbol = "text.bubble"
+            title = ""
+            tooltip = "Turning your dictation into text"
+        } else if recorder.isRecording, let start = recorder.startDate {
             symbol = "record.circle.fill"
             color = .systemRed
             title = " " + Formatting.elapsed(Date().timeIntervalSince(start))
             tooltip = "Recording — \(HotKeyPresets.current.title) to stop"
+            let warnings = recorder.liveWarnings
+            if !warnings.isEmpty {
+                symbol = "exclamationmark.triangle.fill"
+                color = .systemOrange
+                tooltip = "Recording with a problem — \(warnings.joined(separator: " "))"
+            }
         } else if processingDirectory != nil || regenerating {
             symbol = "hourglass"
             title = " " + (processingStep ?? "Processing…")
@@ -295,7 +335,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func statusText() -> String {
         if recorder.isRecording, let start = recorder.startDate {
-            return "Recording — \(Formatting.elapsed(Date().timeIntervalSince(start)))"
+            let problem = recorder.liveWarnings.isEmpty ? "" : " (with a problem)"
+            return "Recording\(problem) — \(Formatting.elapsed(Date().timeIntervalSince(start)))"
         }
         if processingDirectory != nil || regenerating {
             return processingStep ?? "Processing…"
@@ -318,6 +359,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let status = NSMenuItem(title: statusText(), action: nil, keyEquivalent: "")
         status.isEnabled = false
         menu.addItem(status)
+        if recorder.isRecording {
+            for problem in recorder.liveWarnings {
+                let warning = NSMenuItem(title: "⚠︎ \(problem)", action: nil, keyEquivalent: "")
+                warning.isEnabled = false
+                menu.addItem(warning)
+            }
+        }
+        if !dictationHotKeyOK, let preset = DictationHotKeyPresets.current {
+            let warning = NSMenuItem(title: "⚠︎ The dictation shortcut \(preset.title) is used by another app — pick another one under Dictation", action: nil, keyEquivalent: "")
+            warning.isEnabled = false
+            menu.addItem(warning)
+        }
         if !hotKeyOK {
             let warning = NSMenuItem(title: "⚠︎ The shortcut \(HotKeyPresets.current.title) is used by another app — pick another one below", action: nil, keyEquivalent: "")
             warning.isEnabled = false
@@ -344,6 +397,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         addLanguageMenu(to: menu)
         addMinutesWriterMenus(to: menu)
         addMicrophoneMenu(to: menu)
+        addDictationMenu(to: menu)
 
         let shortcuts = NSMenu()
         for (index, preset) in HotKeyPresets.all.enumerated() {
@@ -466,6 +520,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let micItem = NSMenuItem(title: "Microphone: \(micName)", action: nil, keyEquivalent: "")
         micItem.submenu = microphones
         menu.addItem(micItem)
+    }
+
+    private func addDictationMenu(to menu: NSMenu) {
+        let current = DictationHotKeyPresets.current
+        let submenu = NSMenu()
+        let explanation = NSMenuItem(
+            title: current.map { "Hold \($0.title) and talk; release to finish. A quick tap keeps listening until the next tap." } ?? "Dictation is off",
+            action: nil, keyEquivalent: ""
+        )
+        explanation.isEnabled = false
+        submenu.addItem(explanation)
+        submenu.addItem(.separator())
+        for (index, preset) in DictationHotKeyPresets.all.enumerated() {
+            let option = item("Shortcut: \(preset.title)", #selector(selectDictationHotKey(_:)))
+            option.tag = index
+            option.state = index == Settings.shared.dictationHotKeyPreset ? .on : .off
+            submenu.addItem(option)
+        }
+        let off = item("Off", #selector(selectDictationHotKey(_:)))
+        off.tag = -1
+        off.state = current == nil ? .on : .off
+        submenu.addItem(off)
+        submenu.addItem(.separator())
+
+        let writer = MinutesGenerator.currentEngine().provider?.shortTitle
+        submenu.addItem(toggle("Type as You Speak", Settings.shared.dictationTypeLive, #selector(toggleDictationTypeLive)))
+        submenu.addItem(toggle("Clean Up Text with AI" + (writer.map { " (\($0))" } ?? ""), Settings.shared.dictationCleanUp, #selector(toggleDictationCleanUp)))
+        if !TextInserter.canPaste {
+            submenu.addItem(item("Allow Typing into Other Apps…", #selector(allowTyping)))
+        }
+        submenu.addItem(.separator())
+        submenu.addItem(toggle("Learn Glossary Automatically", Settings.shared.glossaryAutoLearn, #selector(toggleGlossaryLearning)))
+        let update = item(learningGlossary ? "Updating Glossary…" : "Update Glossary Now", #selector(updateGlossaryNow))
+        update.isEnabled = !learningGlossary
+        submenu.addItem(update)
+        submenu.addItem(item("Open Glossary", #selector(openGlossary)))
+
+        let dictationItem = NSMenuItem(title: "Dictation: \(current?.title ?? "off")", action: nil, keyEquivalent: "")
+        dictationItem.submenu = submenu
+        menu.addItem(dictationItem)
     }
 
     private func item(_ title: String, _ action: Selector) -> NSMenuItem {
@@ -628,6 +722,130 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         updateStatusButton()
     }
 
+    // MARK: - Dictation
+
+    private func setUpDictation() {
+        dictationHotKey = HotKey(
+            onPress: { [weak self] in self?.dictation.keyDown() },
+            onRelease: { [weak self] in self?.dictation.keyUp() }
+        )
+        registerDictationHotKey(announceFailure: true)
+        // Load the speech model now, so the first dictation shows words right away.
+        Task.detached(priority: .utility) {
+            await MeetingLanguage.resolveDefaultIfNeeded()
+            await LiveTranscriber.warmUp(locale: MeetingLanguage.locale)
+        }
+        dictation.onChange = { [weak self] in self?.updateStatusButton() }
+        dictation.onProblem = { [weak self] message in
+            Log.error(message)
+            NSSound(named: "Basso")?.play()
+            Notifier.shared.post(title: "Dictation", body: message)
+            self?.showBadgeIfNotificationsOff(Badge(text: "Dictation problem", symbol: "exclamationmark.triangle.fill", color: .systemOrange))
+        }
+        dictation.onDictated = { [weak self] _, delivery in
+            guard let self else { return }
+            if delivery == .copied {
+                Notifier.shared.post(
+                    title: "Text copied — press ⌘V",
+                    body: "To have dictation type by itself, allow Meeting Minutes in System Settings › Privacy & Security › Accessibility.",
+                    sound: false
+                )
+                showBadgeIfNotificationsOff(Badge(text: "Copied — press ⌘V", symbol: "doc.on.clipboard", color: .systemBlue))
+            }
+            Settings.shared.dictationsSinceLearning += 1
+            if Settings.shared.glossaryAutoLearn && Settings.shared.dictationsSinceLearning >= 15 {
+                learnGlossary(manual: false)
+            }
+        }
+    }
+
+    private func registerDictationHotKey(announceFailure: Bool) {
+        guard let preset = DictationHotKeyPresets.current else {
+            dictationHotKey?.unregister()
+            dictationHotKeyOK = true
+            return
+        }
+        dictationHotKeyOK = dictationHotKey?.register(preset) ?? false
+        if !dictationHotKeyOK && announceFailure {
+            Notifier.shared.post(
+                title: "Dictation shortcut \(preset.title) unavailable",
+                body: "Another app already uses this combination. Pick another one in the Meeting Minutes menu, under Dictation."
+            )
+        }
+    }
+
+    /// Asks the AI to add new terms and corrections to the glossary, in the background.
+    private func learnGlossary(manual: Bool) {
+        guard !learningGlossary else { return }
+        let engine = MinutesGenerator.currentEngine()
+        if case .none = engine {
+            if manual { Notifier.shared.post(title: "Could not update the glossary", body: MinutesError.noEngine.localizedDescription) }
+            return
+        }
+        learningGlossary = true
+        let since = Settings.shared.glossaryLearnedAt
+        let startedAt = Date()
+        // The AppDelegate lives as long as the app; it is safe to capture directly.
+        let owner = self
+        Task.detached(priority: .utility) {
+            await MeetingLanguage.resolveDefaultIfNeeded()
+            let result: Result<GlossaryLearner.Outcome, Error>
+            do {
+                result = .success(try await GlossaryLearner.learn(engine: engine, locale: MeetingLanguage.locale, since: since))
+            } catch {
+                result = .failure(error)
+            }
+            await MainActor.run {
+                owner.learningGlossary = false
+                // Wait for 15 more dictations (or the next minutes) before trying again, even after a failure.
+                Settings.shared.dictationsSinceLearning = 0
+                switch result {
+                case let .success(outcome):
+                    Settings.shared.glossaryLearnedAt = startedAt
+                    if manual {
+                        Notifier.shared.post(title: "Glossary updated", body: "\(outcome.summary). Click to open it.", fileURL: Glossary.fileURL, sound: false)
+                    }
+                case let .failure(error):
+                    if error is GlossaryLearner.LearnError { Settings.shared.glossaryLearnedAt = startedAt }
+                    if manual {
+                        Notifier.shared.post(title: "Could not update the glossary", body: error.localizedDescription)
+                    } else if !(error is GlossaryLearner.LearnError) {
+                        Log.error("Could not update the glossary: \(error.localizedDescription)")
+                    }
+                }
+            }
+        }
+    }
+
+    @objc private func selectDictationHotKey(_ sender: NSMenuItem) {
+        Settings.shared.dictationHotKeyPreset = sender.tag
+        registerDictationHotKey(announceFailure: true)
+    }
+
+    @objc private func toggleDictationCleanUp() { Settings.shared.dictationCleanUp.toggle() }
+    @objc private func toggleDictationTypeLive() { Settings.shared.dictationTypeLive.toggle() }
+    @objc private func toggleGlossaryLearning() { Settings.shared.glossaryAutoLearn.toggle() }
+    @objc private func updateGlossaryNow() { learnGlossary(manual: true) }
+
+    @objc private func allowTyping() {
+        TextInserter.requestPermission()
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    @objc private func openGlossary() {
+        if !FileManager.default.fileExists(atPath: Glossary.fileURL.path) {
+            do {
+                try Glossary().save()
+            } catch {
+                Log.error("Could not create the glossary: \(error.localizedDescription)")
+                return
+            }
+        }
+        NSWorkspace.shared.open(Glossary.fileURL)
+    }
+
     private func registerHotKey(announceFailure: Bool) {
         hotKeyOK = hotKey?.register(HotKeyPresets.current) ?? false
         if !hotKeyOK && announceFailure {
@@ -655,6 +873,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
             onboardingRunning = false
             updateStatusButton()
+            logPermissions() // so --diagnose reports the permissions granted during setup
         }
     }
 }

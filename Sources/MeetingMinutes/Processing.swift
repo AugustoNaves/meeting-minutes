@@ -98,7 +98,13 @@ enum MeetingProcessor {
         async let micPhrases = Transcription.transcribe(fileURL: micURL, locale: locale)
         async let systemPhrases = Transcription.transcribe(fileURL: systemURL, locale: locale)
         let (mic, system) = try await (micPhrases, systemPhrases)
-        let lines = TranscriptBuilder.build(micPhrases: mic, systemPhrases: system)
+        // The glossary's corrections fix names the recognizer consistently gets wrong.
+        let glossary = Glossary.load()
+        let lines = TranscriptBuilder.build(micPhrases: mic, systemPhrases: system).map { line -> TranscriptLine in
+            var fixed = line
+            fixed.text = glossary.apply(to: line.text)
+            return fixed
+        }
         let transcript = TranscriptBuilder.markdown(lines, strings: strings)
         Log.info("Transcript ready: \(lines.count) lines in \(Int(Date().timeIntervalSince(startedAt))) s (\(MeetingLanguage.displayName(locale))).")
 
@@ -119,11 +125,43 @@ enum MeetingProcessor {
             progress("Writing minutes…")
             do {
                 let generationStart = Date()
-                minutes = try await MinutesGenerator.generate(transcript: transcript, context: context, locale: locale, engine: engine)
+                minutes = try await MinutesGenerator.generate(transcript: transcript, context: context, locale: locale, engine: engine, glossary: glossary.terms)
                 Log.info("Minutes written by \(engine.label) in \(Int(Date().timeIntervalSince(generationStart))) s.")
             } catch {
                 failure = error.localizedDescription
                 Log.error("Could not write the minutes: \(error.localizedDescription)")
+            }
+        }
+
+        try Paths.ensure(Paths.minutesFolder)
+        let fileURL = MarkdownWriter.uniqueURL(for: meta.startDate)
+        var warnings = meta.warnings
+
+        // Almost no speech for a long recording means something went wrong with the audio:
+        // keep it (even with "Keep Meeting Audio" off) so the meeting is not lost.
+        let wordCount = TranscriptBuilder.wordCount(lines)
+        let lowSpeech = MeetingProcessor.looksBroken(wordCount: wordCount, duration: duration)
+        var keepRecording = false
+        if Settings.shared.keepAudio || lowSpeech {
+            let base = fileURL.deletingPathExtension().lastPathComponent
+            var kept: [String] = []
+            do {
+                try Paths.ensure(Paths.audioArchiveFolder)
+                for (source, suffix) in [(micURL, "you"), (systemURL, "meeting")] where FileManager.default.fileExists(atPath: source.path) {
+                    let name = "\(base)_\(suffix).m4a"
+                    try AudioArchiver.archive(source, to: Paths.audioArchiveFolder.appendingPathComponent(name))
+                    kept.append(name)
+                }
+            } catch {
+                Log.error("Could not keep the audio: \(error.localizedDescription)")
+                keepRecording = lowSpeech
+            }
+            if lowSpeech {
+                let place = keepRecording
+                    ? "The recording was kept: use “Process Pending Recordings” in the menu to try again."
+                    : "The audio was kept in the Audio folder next to this file (\(kept.joined(separator: ", "))), so the meeting is not lost."
+                warnings.append("Only \(wordCount) word(s) were recognized in \(Formatting.elapsed(duration)) of recording: something probably went wrong with the audio. \(place)")
+                Log.error("Little speech recognized (\(wordCount) words in \(Formatting.elapsed(duration))); audio kept.")
             }
         }
 
@@ -133,27 +171,22 @@ enum MeetingProcessor {
             minutes: minutes,
             failure: failure,
             transcript: transcript,
-            warnings: meta.warnings
+            warnings: warnings
         )
-        try Paths.ensure(Paths.minutesFolder)
-        let fileURL = MarkdownWriter.uniqueURL(for: meta.startDate)
         try markdown.write(to: fileURL, atomically: true, encoding: .utf8)
         Log.info("Minutes saved to \(fileURL.path).")
 
-        if Settings.shared.keepAudio {
-            let base = fileURL.deletingPathExtension().lastPathComponent
-            do {
-                try Paths.ensure(Paths.audioArchiveFolder)
-                for (source, suffix) in [(micURL, "you"), (systemURL, "meeting")] where FileManager.default.fileExists(atPath: source.path) {
-                    try AudioArchiver.archive(source, to: Paths.audioArchiveFolder.appendingPathComponent("\(base)_\(suffix).m4a"))
-                }
-            } catch {
-                Log.error("Could not keep the audio: \(error.localizedDescription)")
-            }
+        if !keepRecording {
+            try? FileManager.default.removeItem(at: dir)
         }
-        try? FileManager.default.removeItem(at: dir)
 
-        return ProcessOutcome(fileURL: fileURL, minutesGenerated: minutes != nil, failure: failure, warnings: meta.warnings)
+        return ProcessOutcome(fileURL: fileURL, minutesGenerated: minutes != nil, failure: failure, warnings: warnings)
+    }
+
+    /// True when a recording of at least 2 minutes produced fewer than 5 words per minute.
+    /// A real conversation gives well over 50; this only happens when the audio was broken.
+    static func looksBroken(wordCount: Int, duration: Double) -> Bool {
+        duration >= 120 && Double(wordCount) < duration / 60 * 5
     }
 
     /// Reads an existing .md, sends its transcript to the AI again and rewrites the minutes part.
@@ -163,7 +196,8 @@ enum MeetingProcessor {
             throw MinutesError.invalidResponse("the file has no “Full Transcript” section")
         }
         let strings = detected.strings
-        let transcript = String(text[detected.heading.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+        let glossary = Glossary.load()
+        let transcript = glossary.apply(to: String(text[detected.heading.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines))
         guard !transcript.isEmpty, transcript != "_\(strings.emptyTranscript)_" else {
             throw MinutesError.invalidResponse("the transcript in this file is empty")
         }
@@ -173,7 +207,7 @@ enum MeetingProcessor {
         let engine = MinutesGenerator.currentEngine()
         if case .none = engine { throw MinutesError.noEngine }
         let minutes = try await MinutesGenerator.generate(
-            transcript: transcript, context: "Meeting date: \(dateText).", locale: detected.locale, engine: engine
+            transcript: transcript, context: "Meeting date: \(dateText).", locale: detected.locale, engine: engine, glossary: glossary.terms
         )
         let markdown = MarkdownWriter.render(title: title, strings: strings, minutes: minutes, failure: nil, transcript: transcript, warnings: [])
         try markdown.write(to: fileURL, atomically: true, encoding: .utf8)

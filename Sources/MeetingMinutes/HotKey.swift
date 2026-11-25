@@ -21,20 +21,45 @@ enum HotKeyPresets {
     }
 }
 
+/// Shortcuts for dictation (hold to talk). nil = dictation turned off.
+enum DictationHotKeyPresets {
+    static let all: [HotKeyPreset] = [
+        HotKeyPreset(title: "⌥Space", keyCode: UInt32(kVK_Space), modifiers: UInt32(optionKey)),
+        HotKeyPreset(title: "⌃⌥Space", keyCode: UInt32(kVK_Space), modifiers: UInt32(controlKey | optionKey)),
+        HotKeyPreset(title: "⌥⇧D", keyCode: UInt32(kVK_ANSI_D), modifiers: UInt32(optionKey | shiftKey)),
+        HotKeyPreset(title: "⌃⇧D", keyCode: UInt32(kVK_ANSI_D), modifiers: UInt32(controlKey | shiftKey)),
+    ]
+
+    static var current: HotKeyPreset? {
+        let index = Settings.shared.dictationHotKeyPreset
+        return all.indices.contains(index) ? all[index] : nil
+    }
+}
+
 /// Global shortcut through Carbon (RegisterEventHotKey): works with any app in front,
 /// including full-screen apps, and needs no Accessibility permission.
 final class HotKey {
-    private static var handlers: [UInt32: () -> Void] = [:]
+    private struct Actions {
+        let press: () -> Void
+        let release: (() -> Void)?
+    }
+
+    private static var handlers: [UInt32: Actions] = [:]
     private static var eventHandler: EventHandlerRef?
     private static var nextID: UInt32 = 1
 
     private let id: UInt32
     private var reference: EventHotKeyRef?
 
-    init(action: @escaping () -> Void) {
+    convenience init(action: @escaping () -> Void) {
+        self.init(onPress: action, onRelease: nil)
+    }
+
+    /// `onRelease` runs when the keys are let go (used for "hold to talk").
+    init(onPress: @escaping () -> Void, onRelease: (() -> Void)?) {
         id = Self.nextID
         Self.nextID += 1
-        Self.handlers[id] = action
+        Self.handlers[id] = Actions(press: onPress, release: onRelease)
         Self.installHandlerIfNeeded()
     }
 
@@ -65,7 +90,10 @@ final class HotKey {
 
     private static func installHandlerIfNeeded() {
         guard eventHandler == nil else { return }
-        var spec = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
+        var specs = [
+            EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed)),
+            EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyReleased)),
+        ]
         InstallEventHandler(GetApplicationEventTarget(), { _, event, _ -> OSStatus in
             guard let event else { return OSStatus(eventNotHandledErr) }
             var hotKeyID = EventHotKeyID()
@@ -78,9 +106,14 @@ final class HotKey {
                 nil,
                 &hotKeyID
             )
-            guard status == noErr, let action = HotKey.handlers[hotKeyID.id] else { return OSStatus(eventNotHandledErr) }
-            DispatchQueue.main.async { action() }
+            guard status == noErr, let actions = HotKey.handlers[hotKeyID.id] else { return OSStatus(eventNotHandledErr) }
+            if GetEventKind(event) == UInt32(kEventHotKeyReleased) {
+                guard let release = actions.release else { return noErr }
+                DispatchQueue.main.async { release() }
+            } else {
+                DispatchQueue.main.async { actions.press() }
+            }
             return noErr
-        }, 1, &spec, nil, &eventHandler)
+        }, specs.count, &specs, nil, &eventHandler)
     }
 }
