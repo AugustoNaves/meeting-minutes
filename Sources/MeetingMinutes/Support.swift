@@ -190,6 +190,12 @@ final class Settings {
         set { defaults.set(newValue, forKey: "dictationTypeLive") }
     }
 
+    /// meetingminutes://start may begin a recording without asking (the person chose “Always Allow”).
+    var linksMayStartRecording: Bool {
+        get { defaults.bool(forKey: "linksMayStartRecording") }
+        set { defaults.set(newValue, forKey: "linksMayStartRecording") }
+    }
+
     /// Let the AI add terms and corrections to the glossary on its own.
     var glossaryAutoLearn: Bool {
         get { defaults.bool(forKey: "glossaryAutoLearn") }

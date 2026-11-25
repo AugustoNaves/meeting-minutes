@@ -573,6 +573,11 @@ enum MinutesGenerator {
             "--output-format", "json",
             "--print-timeout", "\(Int(request.timeout))s",
             "--disable-slash-commands",
+            // Antigravity is an agent. The text comes from meetings and dictations, so it could
+            // carry instructions ("run this command"): plan mode makes no changes and the sandbox
+            // restricts the terminal. It never gets --dangerously-skip-permissions.
+            "--mode", "plan",
+            "--sandbox",
         ]
         if let schema = request.schema { arguments += ["--json-schema", try schemaString(schema)] }
         if let model = request.fast ? GeminiModels.fastestID : GeminiModels.selectedID { arguments += ["--model", model] }

@@ -194,7 +194,7 @@ The headings and the `[You]` / `[Meeting]` labels follow the meeting language (b
 | Check Permissions… | Repeats the first-launch setup |
 | Show Log | Opens `~/Library/Logs/MeetingMinutes.log` |
 
-You can also control it with links (macOS Shortcuts, Raycast, Stream Deck): `meetingminutes://toggle`, `meetingminutes://start`, `meetingminutes://stop`.
+You can also control it with links (macOS Shortcuts, Raycast, Stream Deck): `meetingminutes://toggle`, `meetingminutes://start`, `meetingminutes://stop`. Any app or web page can open such a link, so a link that would **start** a recording asks first; choose **Always Allow Links** if you use them in Shortcuts or Raycast (to be asked again: `defaults delete local.meetingminutes linksMayStartRecording`). Stopping never asks.
 
 ---
 
@@ -244,6 +244,9 @@ Estimate for **one hour of meeting** (about 15,000 transcript tokens): Opus ≈ 
 - Raw audio is deleted once the minutes are saved, unless you turn on "Keep Meeting Audio" or almost nothing was recognized in a long recording (then it is kept in `Audio/`, so a meeting is never lost to a recording problem).
 - **Dictation:** the audio never leaves your Mac either. The text goes to the AI only while **Clean Up Text with AI** is on.
 - The last 300 dictations are kept on your Mac (`~/Library/Application Support/MeetingMinutes/dictations.jsonl`) for the glossary. When the glossary learns, recent dictations and minutes are sent to the AI you chose. Turn off **Learn Glossary Automatically** to stop that.
+- The AI only gets text, and no AI can run anything on your Mac: Claude Code is called with no tools, and Antigravity in plan mode inside its sandbox, so instructions spoken in a meeting cannot make them act.
+- Keys are stored in the macOS Keychain and only travel encrypted: a compatible service must use `https://` (plain `http://` is only allowed for services on your own Mac, like Ollama or LM Studio).
+- Prosa has no third-party dependencies: it is built only with Apple's frameworks.
 - The log records only events and errors, never what was said.
 
 ---
